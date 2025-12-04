@@ -2,3 +2,6 @@
 2. Avoid waiting on fences when not necessary.
 3. Simple rendering to a canvas.
 4. More diverse examples & stress testing.
+5. Stress test caches.
+6. Optimise SPIRV reading code (fixing kimi's mediocre output was already a pain)
+7. Better handling of dispatch x, y, z.
