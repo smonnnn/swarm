@@ -1,10 +1,5 @@
 #include "vk_command.h"
 
-//Thread code makes frees commandbuffer data and destroys fences after waiting for the fence.
-#include <threads.h>
-#include <stdatomic.h>
-#include <string.h>
-
 void runCopyCommand(VKCTX ctx, VKBUFFER from, VKBUFFER to, uint32_t from_offset, uint32_t to_offset, uint32_t size){
     VkCommandBufferAllocateInfo allocInfo = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
@@ -43,7 +38,7 @@ void runCopyCommand(VKCTX ctx, VKBUFFER from, VKBUFFER to, uint32_t from_offset,
     vkDestroyFence(ctx.device, fence, NULL);
 }
 
-void runComputeCommand(VKCTX ctx, VKPROGRAM* programs, uint32_t program_count){
+void runComputeCommand(VKCTX ctx, VKPROGRAM* programs, uint32_t program_count, uint32_t groups){
     VkCommandBufferAllocateInfo cbai = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
         .commandPool = ctx.command_pool,
@@ -62,12 +57,9 @@ void runComputeCommand(VKCTX ctx, VKPROGRAM* programs, uint32_t program_count){
     for(int i = 0; i < program_count; i++){
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, programs[i].pipeline);
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, programs[i].pipeline_layout, 0, 1, &programs[i].descriptor_set, 0, NULL);
-        // dispatch 64 * N elements
-        uint32_t numElems = 1024 / sizeof(uint32_t);
-        uint32_t groups = (numElems + 63) / 64;
 
         vkCmdDispatch(cmd, groups, 1, 1);
-        VkBufferMemoryBarrier barriers[programs[i].buffer_count]; //Should be the max amount of barriers.
+        VkBufferMemoryBarrier barriers[programs[i].buffer_count]; //Should be the max amount of barriers possible for the given buffers.
         uint32_t barrierCount = 0;
 
         for (uint32_t j = 0; j < programs[i].buffer_count; ++j) {

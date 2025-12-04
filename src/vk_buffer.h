@@ -10,7 +10,7 @@
 typedef struct VKBUFFER {
     VkBuffer       buffer;
     VkDeviceMemory memory;
-    VkDeviceSize   size;          /* actual allocated size */
+    VkDeviceSize   size;
 } VKBUFFER;
 
 typedef enum {
@@ -18,14 +18,14 @@ typedef enum {
     BUF_GPU = 1
 } BufferLocation;
 
-/* where = true → VRAM , false → host-visible/coherent */
 VKBUFFER newBuffer(VKCTX ctx, VkDeviceSize size, BufferLocation where);
 void destroyBuffer(VKCTX ctx, VKBUFFER buf);
 
-/* helpers ------------------------------------------------------------------ */
 static inline void* mapBuffer(VKCTX ctx, VKBUFFER b) {
     void* p; vkMapMemory(ctx.device, b.memory, 0, b.size, 0, &p); return p;
 }
-static inline void unmapBuffer(VKCTX ctx, VKBUFFER b) { vkUnmapMemory(ctx.device, b.memory); }
 
+static inline void unmapBuffer(VKCTX ctx, VKBUFFER b) { 
+    vkUnmapMemory(ctx.device, b.memory); 
+}
 #endif

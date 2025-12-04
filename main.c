@@ -14,7 +14,7 @@ int main(){
         mapped[i] = (float) i;
     }
     unmapBuffer(ctx, cpu_buffer);
-    
+
     runCopyCommand(ctx, cpu_buffer, bufA, 0, 0, cpu_buffer.size);
     runCopyCommand(ctx, cpu_buffer, bufB, 0, 0, cpu_buffer.size);
     VKBUFFER buffers[3];
@@ -22,7 +22,10 @@ int main(){
     buffers[1] = bufB;
     buffers[2] = output;
     useBuffers(ctx, &program, buffers, 3);
-    runComputeCommand(ctx, &program, 1);
+    // dispatch 64 * N elements
+    uint32_t numElems = 256 / sizeof(uint32_t);
+    uint32_t groups = (numElems + 63) / 64;
+    runComputeCommand(ctx, &program, 1, groups);
     runCopyCommand(ctx, output, cpu_buffer, 0, 0, output.size);
     mapped = mapBuffer(ctx, cpu_buffer);
     for(int i = 0; i < output.size; i++){

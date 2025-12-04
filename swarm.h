@@ -70,5 +70,5 @@ void useBuffers(VKCTX ctx, VKPROGRAM* program, VKBUFFER* buffers, uint32_t buffe
 
 //vk_command
 void runCopyCommand(VKCTX ctx, VKBUFFER from, VKBUFFER to, uint32_t from_offset, uint32_t to_offset, uint32_t size);
-void runComputeCommand(VKCTX ctx, VKPROGRAM* programs, uint32_t program_count);
+void runComputeCommand(VKCTX ctx, VKPROGRAM* programs, uint32_t program_count, uint32_t groups);
 #endif
