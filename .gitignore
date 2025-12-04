@@ -1,3 +1,9 @@
+build
+shaders/compiled
+shaders/filter_state.comp
+shaders/update_state.comp
+
+
 # Prerequisites
 *.d
 

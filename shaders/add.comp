@@ -1,0 +1,20 @@
+#version 450
+layout(local_size_x = 64) in;
+
+layout(binding = 0) buffer BufA {
+    float valuesA[];
+};
+
+layout(binding = 1) buffer BufB {
+    float valuesB[];
+};
+
+layout(binding = 2) buffer BufC {
+    float outputs[];
+};
+
+void main() {
+    uint i = gl_GlobalInvocationID.x;
+    if (i >= outputs.length() || i >= valuesA.length() || i >= valuesB.length()) return;
+    outputs[i] = valuesA[i] + valuesB[i];
+}
