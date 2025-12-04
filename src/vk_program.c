@@ -51,7 +51,6 @@ VkDescriptorSetLayout getOrCreateDescriptorSetLayout(VKCTX ctx, ShaderInfo s){
     return layout;
 }
 
-
 typedef struct {
     VkDescriptorSetLayout setLayout;
     VkPipelineLayout      layout;
@@ -85,13 +84,13 @@ static VkDescriptorType classify(int storageClass, int dataOp, const uint32_t* c
     (void)code; (void)dataOff;   /* unused in this minimal version */
 
     switch (storageClass) {
-    case 9:  return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;          /* PushConstant */
-    case 12: return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;          /* Uniform block   */
-    case 11: return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;          /* StorageBuffer   */
-    case 2:  {                                                   /* UniformConstant */
-        if (dataOp == 25) {                                      /* OpTypeImage */
+    case 9:  return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;              /* PushConstant */
+    case 12: return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;              /* Uniform block   */
+    case 11: return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;              /* StorageBuffer   */
+    case 2:  {                                                      /* UniformConstant */
+        if (dataOp == 25) {                                         /* OpTypeImage */
             /* sampled flag is word 6 of OpTypeImage */
-            uint32_t sampled = (dataOff < 64) ? 1 : 0;         /* placeholder – see below */
+            uint32_t sampled = (dataOff < 64) ? 1 : 0; 
             return sampled ? VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE
                            : VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
         }
@@ -100,7 +99,7 @@ static VkDescriptorType classify(int storageClass, int dataOp, const uint32_t* c
         break;
     }
     }
-    return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER; /* fallback – keep compile going */
+    return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 }
 
 ShaderInfo readShader(const char* shader_path){
@@ -123,12 +122,12 @@ ShaderInfo readShader(const char* shader_path){
     s.spirv_bytecode        = code;
     s.spirv_bytecode_length = byteLen;
     size_t wordCount = byteLen / 4;
-    uint32_t bound   = code[3];              /* header word 3 */
+    uint32_t bound   = code[3];
 
     /* ---- exact-size side tables --------------------------------- */
     int id2binding[512] = {0};
     int id2storage[512] = {0};
-    int id2dataOp[512]  = {0}; /* opcode of pointee */
+    int id2dataOp[512]  = {0};   /* opcode of pointee */
     int touched[512]    = {0};   /* binding→usage */
     int ptr2base[512] = {0};
 
@@ -231,9 +230,9 @@ ShaderInfo readShader(const char* shader_path){
     size_t count = 0;
     for (int b = 0; b < 256; ++b) if (touched[b]) ++count;
 
-    s.buffer_indices             = (uint32_t*)XMALLOC(count * sizeof(uint32_t));
-    s.binding_read_write_limitations = (BindingLimitations*)XMALLOC(count * sizeof(BindingLimitations));
-    s.buffer_types    = (VkDescriptorType*)XMALLOC(count * sizeof(VkDescriptorType));
+    s.buffer_indices                    = (uint32_t*)           XMALLOC(count * sizeof(uint32_t));
+    s.binding_read_write_limitations    = (BindingLimitations*) XMALLOC(count * sizeof(BindingLimitations));
+    s.buffer_types                      = (VkDescriptorType*)   XMALLOC(count * sizeof(VkDescriptorType));
     s.buffer_count = 0;
 
     for (int b = 0; b < 256; ++b) {
@@ -270,7 +269,6 @@ VkPipeline createPipeline(VKCTX ctx, VkPipelineLayout pipelineLayout, ShaderInfo
 
     VkShaderModule shader;
     VK_CHECK(vkCreateShaderModule(ctx.device, &smi, NULL, &shader));    
-    printf("Generating shader pipeline with entrypoint: %s\n", shader_info.entrypoint);
     VkPipelineShaderStageCreateInfo stage = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
         .stage = VK_SHADER_STAGE_COMPUTE_BIT,
@@ -287,14 +285,13 @@ VkPipeline createPipeline(VKCTX ctx, VkPipelineLayout pipelineLayout, ShaderInfo
     VkPipeline pipeline;
     VK_CHECK(vkCreateComputePipelines(ctx.device, VK_NULL_HANDLE, 1, &pci, NULL, &pipeline));
 
-    //Cleanup
     vkDestroyShaderModule(ctx.device, shader, NULL);
     free(shader_info.spirv_bytecode);
     shader_info.spirv_bytecode_length = 0;
     return pipeline;
 }
 
-VKPROGRAM createProgram(VKCTX ctx, const char* shader_path){//TODO: implement read write limitations & auto barriers in the command c file
+VKPROGRAM createProgram(VKCTX ctx, const char* shader_path){
     VKPROGRAM program = {0};
     ShaderInfo shader_info = readShader(shader_path);
     program.buffer_indices = shader_info.buffer_indices;
@@ -420,8 +417,8 @@ void useBuffers(VKCTX ctx, VKPROGRAM *prog, VKBUFFER *buffers, uint32_t buf_coun
     /* ---- 7.  publish to program ------------------------------- */
     prog->descriptor_set = newSet;
     free(prog->buffers);
-    prog->buffers     = XMALLOC(buf_count * sizeof(VKBUFFER));
-    prog->buffer_count = buf_count;
+    prog->buffers       = XMALLOC(buf_count * sizeof(VKBUFFER));
+    prog->buffer_count  = buf_count;
     memcpy(prog->buffers, buffers, buf_count * sizeof(VKBUFFER));
 }
 

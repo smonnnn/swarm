@@ -22,6 +22,7 @@ int main(){
     buffers[1] = bufB;
     buffers[2] = output;
     useBuffers(ctx, &program, buffers, 3);
+    
     // dispatch 64 * N elements
     uint32_t numElems = 256 / sizeof(uint32_t);
     uint32_t groups = (numElems + 63) / 64;
