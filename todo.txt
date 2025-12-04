@@ -1,0 +1,4 @@
+1. Make it thread-safe.
+2. Avoid waiting on fences when not necessary.
+3. Simple rendering to a canvas.
+4. More diverse examples & stress testing.

@@ -14,8 +14,7 @@ int main(){
         mapped[i] = (float) i;
     }
     unmapBuffer(ctx, cpu_buffer);
-    mapped = NULL;
-
+    
     runCopyCommand(ctx, cpu_buffer, bufA, 0, 0, cpu_buffer.size);
     runCopyCommand(ctx, cpu_buffer, bufB, 0, 0, cpu_buffer.size);
     VKBUFFER buffers[3];
