@@ -116,7 +116,7 @@ VkDescriptorPool createDescriptorPool(VkDevice device){
 
     VkDescriptorPoolCreateInfo poolInfo = {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-        .maxSets = 1,
+        .maxSets = 32,
         .poolSizeCount = 1,
         .pPoolSizes = &poolSize
     };

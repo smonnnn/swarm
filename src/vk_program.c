@@ -256,7 +256,7 @@ VkPipeline createPipeline(VKCTX ctx, VkPipelineLayout pipelineLayout, ShaderInfo
 static struct hashmap_s program_map;
 static int program_map_initialized = 0;
 
-VKPROGRAM* createProgram(VKCTX ctx, const char* shader_path){
+VKPROGRAM createProgram(VKCTX ctx, const char* shader_path){
     printf("Shader path: %s\n", shader_path);
     if (!program_map_initialized) {
         if (0 != hashmap_create(1, &program_map)) {
@@ -266,7 +266,7 @@ VKPROGRAM* createProgram(VKCTX ctx, const char* shader_path){
         program_map_initialized = 1;
     }
     VKPROGRAM* cached = hashmap_get(&program_map, shader_path, strlen(shader_path));
-    if (cached) return cached;
+    if (cached) return *cached;
 
     VKPROGRAM* program = XMALLOC(sizeof(VKPROGRAM));
     ShaderInfo shader_info = readShader(shader_path);
@@ -281,7 +281,7 @@ VKPROGRAM* createProgram(VKCTX ctx, const char* shader_path){
     free(shader_info.buffer_types);
     free(shader_info.buffer_indices);
     free(shader_info.binding_read_write_limitations);
-    return program;
+    return *program;
 }
 
 static struct hashmap_s descriptor_map;

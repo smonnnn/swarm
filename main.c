@@ -2,21 +2,25 @@
 
 int main(){
     const char* spirv_path = "./shaders/compiled/add.spv";
+    size_t element_count = 256;
+    size_t buff_size = element_count * sizeof(float);
     printf("Create context...\n");
     VKCTX ctx = createVkContext();
 
-    printf("Create program...\n");
-    VKPROGRAM* program = createProgram(ctx, spirv_path);
+    printf("Create programs...\n");
+    VKPROGRAM programs[2];
+    programs[0] = createProgram(ctx, spirv_path);
+    programs[1] = createProgram(ctx, spirv_path);
 
     printf("Create buffers...\n");
-    VKBUFFER cpu_buffer = newBuffer(ctx, 256 * sizeof(float), BUF_CPU);
-    VKBUFFER bufA = newBuffer(ctx, 256 * sizeof(float), BUF_GPU);
-    VKBUFFER bufB = newBuffer(ctx, 256 * sizeof(float), BUF_GPU);
-    VKBUFFER output = newBuffer(ctx, 256 * sizeof(float), BUF_GPU);
+    VKBUFFER cpu_buffer = newBuffer(ctx, buff_size, BUF_CPU);
+    VKBUFFER bufA       = newBuffer(ctx, buff_size, BUF_GPU);
+    VKBUFFER bufB       = newBuffer(ctx, buff_size, BUF_GPU);
+    VKBUFFER output     = newBuffer(ctx, buff_size, BUF_GPU);
     
     printf("Map buffer & copy data...\n");
     float* mapped = mapBuffer(ctx, cpu_buffer);
-    for(int i = 0; i < 256; i++){
+    for(int i = 0; i < element_count; i++){
         mapped[i] = (float) i;
     }
     unmapBuffer(ctx, cpu_buffer);
@@ -30,21 +34,28 @@ int main(){
     buffers[0] = bufA;
     buffers[1] = bufB;
     buffers[2] = output;
-    useBuffers(ctx, program, buffers, 3);
-    
-    verifyVKPROGRAM(program);
+    useBuffers(ctx, programs, buffers, 3);
+
+    VKBUFFER buffersB[3];
+    buffersB[0] = output;
+    buffersB[1] = output;
+    buffersB[2] = output;
+    useBuffers(ctx, programs + 1, buffersB, 3);
+
+    //Verify programs...
+    verifyVKPROGRAM(programs);
+    verifyVKPROGRAM(programs + 1);
 
     printf("run compute command...\n");
-    uint32_t numElems = (256 * sizeof(float)) /sizeof(float);
-    uint32_t groups = (numElems + 63) / 64;
-    runComputeCommand(ctx, program, 1, groups);
-    
+    uint32_t groups = (element_count + 63) / 64;
+    runComputeCommand(ctx, programs, 2, groups);
+
     printf("Copy data back to cpu buffer...\n");
     runCopyCommand(ctx, output, cpu_buffer, 0, 0, output.size);
     
     printf("Map buffer & print results...\n");
     mapped = mapBuffer(ctx, cpu_buffer);
-    for(int i = 0; i < 256; i++){
+    for(int i = 0; i < element_count; i++){
         printf("%d ", (int) mapped[i]);
     }
     printf("\n");

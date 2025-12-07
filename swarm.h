@@ -67,7 +67,7 @@ static inline void unmapBuffer(VKCTX ctx, VKBUFFER b) {
 }
 
 //vk_program
-VKPROGRAM* createProgram(VKCTX ctx, const char* shader_path);
+VKPROGRAM createProgram(VKCTX ctx, const char* shader_path);
 void destroyProgram(VKCTX ctx, const char* shader_path);
 void useBuffers(VKCTX ctx, VKPROGRAM* program, VKBUFFER* buffers, size_t buffer_count);
 void verifyVKPROGRAM(VKPROGRAM* prog);

@@ -34,7 +34,7 @@ typedef struct{
     size_t spirv_bytecode_length;
 } ShaderInfo;
 
-VKPROGRAM* createProgram(VKCTX ctx, const char* shader_path);
+VKPROGRAM createProgram(VKCTX ctx, const char* shader_path);
 void destroyProgram(VKCTX ctx, const char* shader_path);
 void useBuffers(VKCTX ctx, VKPROGRAM* program, VKBUFFER* buffers, size_t buffer_count);
 void verifyVKPROGRAM(VKPROGRAM* prog);
