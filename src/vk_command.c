@@ -54,7 +54,7 @@ void runComputeCommand(VKCTX ctx, VKPROGRAM* programs, uint32_t program_count, u
     };
 
     vkBeginCommandBuffer(cmd, &bi);
-    for(int i = 0; i < program_count; i++){
+    for(int i = 0; i < program_count; i++){        
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, programs[i].pipeline);
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, programs[i].pipeline_layout, 0, 1, &programs[i].descriptor_set, 0, NULL);
 

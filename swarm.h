@@ -8,6 +8,8 @@
 #include <stddef.h>
 #include <stdbool.h>
 
+#define MAX_BUFFERS 16
+
 //Enums
 typedef enum {
     READ_ONLY,
@@ -42,11 +44,11 @@ typedef struct{
     VkPipelineLayout pipeline_layout;
     VkPipeline pipeline;
     VkDescriptorSet descriptor_set;
-    VkDescriptorType* buffer_types;
-    uint32_t* buffer_indices;
-    VkBuffer* buffers;
+    VkDescriptorType buffer_types[MAX_BUFFERS];
+    uint32_t buffer_indices[MAX_BUFFERS];
+    VKBUFFER buffers[MAX_BUFFERS];
+    BindingLimitations binding_read_write_limitations[MAX_BUFFERS];
     size_t buffer_count;
-    BindingLimitations* binding_read_write_limitations;
 } VKPROGRAM;
 
 //vk_setup
@@ -56,6 +58,7 @@ void destroyVkContext(VKCTX s);
 //vk_buffer
 VKBUFFER newBuffer(VKCTX ctx, VkDeviceSize size, BufferLocation where);
 void destroyBuffer(VKCTX ctx, VKBUFFER buf);
+
 static inline void* mapBuffer(VKCTX ctx, VKBUFFER b) {
     void* p; vkMapMemory(ctx.device, b.memory, 0, b.size, 0, &p); return p;
 }
@@ -64,9 +67,10 @@ static inline void unmapBuffer(VKCTX ctx, VKBUFFER b) {
 }
 
 //vk_program
-VKPROGRAM createProgram(VKCTX ctx, const char* shader_path);
-void destroyProgram(VKCTX ctx, VKPROGRAM* program);
-void useBuffers(VKCTX ctx, VKPROGRAM* program, VKBUFFER* buffers, uint32_t buffer_count);
+VKPROGRAM* createProgram(VKCTX ctx, const char* shader_path);
+void destroyProgram(VKCTX ctx, const char* shader_path);
+void useBuffers(VKCTX ctx, VKPROGRAM* program, VKBUFFER* buffers, size_t buffer_count);
+void verifyVKPROGRAM(VKPROGRAM* prog);
 
 //vk_command
 void runCopyCommand(VKCTX ctx, VKBUFFER from, VKBUFFER to, uint32_t from_offset, uint32_t to_offset, uint32_t size);

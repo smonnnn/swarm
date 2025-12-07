@@ -1,26 +1,7 @@
 #include "vk_program.h"
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include "helpers/hashmap.h"
 
-static bool key_eq(const uint32_t *a, const uint32_t *b, uint32_t n) {
-    return memcmp(a, b, n * sizeof(*a)) == 0;
-}
-
-typedef struct {
-    uint32_t               *types;
-    uint32_t                count;
-    VkDescriptorSetLayout   layout;
-} LayoutEntry;
-
-static LayoutEntry *layout_cache = NULL;
-static size_t       layout_cache_count = 0;
-VkDescriptorSetLayout getOrCreateDescriptorSetLayout(VKCTX ctx, ShaderInfo s){
-    for (size_t i = 0; i < layout_cache_count; ++i)
-        if (layout_cache[i].count == s.buffer_count &&
-            key_eq(layout_cache[i].types, s.buffer_types, s.buffer_count))
-            return layout_cache[i].layout;
-
+VkDescriptorSetLayout getDescriptorSetLayout(VKCTX ctx, ShaderInfo s){
     VkDescriptorSetLayoutBinding bindings[s.buffer_count];
     for (uint32_t i = 0; i < s.buffer_count; ++i) {
         bindings[i] = (VkDescriptorSetLayoutBinding){
@@ -40,29 +21,10 @@ VkDescriptorSetLayout getOrCreateDescriptorSetLayout(VKCTX ctx, ShaderInfo s){
 
     VkDescriptorSetLayout layout;
     VK_CHECK(vkCreateDescriptorSetLayout(ctx.device, &info, NULL, &layout));
-        XREALLOC(layout_cache, (layout_cache_count + 1) * sizeof(*layout_cache));
-    layout_cache[layout_cache_count] = (LayoutEntry){
-        .types  = XMALLOC(s.buffer_count * sizeof(VkDescriptorType)),
-        .count  = s.buffer_count,
-        .layout = layout
-    };
-    memcpy(layout_cache[layout_cache_count].types, s.buffer_types, s.buffer_count * sizeof(VkDescriptorType));
-    ++layout_cache_count;
     return layout;
 }
 
-typedef struct {
-    VkDescriptorSetLayout setLayout;
-    VkPipelineLayout      layout;
-} PloEntry;
-
-static PloEntry *plo_cache     = NULL;
-static size_t    plo_cache_cnt = 0;
-VkPipelineLayout getOrCreatePipelineLayout(VKCTX ctx, VkDescriptorSetLayout setLayout){
-    for (size_t i = 0; i < plo_cache_cnt; ++i)
-        if (plo_cache[i].setLayout == setLayout)
-            return plo_cache[i].layout;
-
+VkPipelineLayout getPipelineLayout(VKCTX ctx, VkDescriptorSetLayout setLayout){
     VkPipelineLayoutCreateInfo ci = {
         .sType          = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
         .setLayoutCount = 1,
@@ -70,9 +32,6 @@ VkPipelineLayout getOrCreatePipelineLayout(VKCTX ctx, VkDescriptorSetLayout setL
     };
     VkPipelineLayout plo;
     VK_CHECK(vkCreatePipelineLayout(ctx.device, &ci, NULL, &plo));
-
-    XREALLOC(plo_cache, (plo_cache_cnt + 1) * sizeof(*plo_cache));
-    plo_cache[plo_cache_cnt++] = (PloEntry){ setLayout, plo };
     return plo;
 }
 
@@ -84,7 +43,7 @@ static VkDescriptorType classify(int storageClass, int dataOp, const uint32_t* c
     (void)code; (void)dataOff;   /* unused in this minimal version */
 
     switch (storageClass) {
-    case 9:  return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;              /* PushConstant */
+    //case 9:  return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;              /* PushConstant */
     case 12: return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;              /* Uniform block   */
     case 11: return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;              /* StorageBuffer   */
     case 2:  {                                                      /* UniformConstant */
@@ -107,7 +66,10 @@ ShaderInfo readShader(const char* shader_path){
 
     /* ---- load file ---------------------------------------------- */
     FILE* f = fopen(shader_path, "rb");
-    if (!f) return s;
+    if (!f) {
+        printf("Could not open path: %s\n", shader_path);
+        exit(0);
+    }
     fseek(f, 0, SEEK_END);
     size_t byteLen = ftell(f);
     rewind(f);
@@ -145,7 +107,7 @@ ShaderInfo readShader(const char* shader_path){
             uint32_t sc  = word(code, off + 2);
             uint32_t pte = word(code, off + 3);
             id2storage[id] = sc;
-            id2dataOp[id]  = opcode(code, pte * 0); /* will refine below */
+            id2dataOp[id]  = opcode(code, pte); /* will refine below */
         }
         /* OpTypeImage / OpTypeSampler / … */
         if (op == 25 || op == 26 || op == 27) {
@@ -256,7 +218,6 @@ ShaderInfo readShader(const char* shader_path){
             (int)s.buffer_types[i],
             (int)s.binding_read_write_limitations[i]);
     }
-
     return s;
 }
 
@@ -287,117 +248,75 @@ VkPipeline createPipeline(VKCTX ctx, VkPipelineLayout pipelineLayout, ShaderInfo
 
     vkDestroyShaderModule(ctx.device, shader, NULL);
     free(shader_info.spirv_bytecode);
+    free(shader_info.entrypoint);
     shader_info.spirv_bytecode_length = 0;
     return pipeline;
 }
 
-VKPROGRAM createProgram(VKCTX ctx, const char* shader_path){
-    VKPROGRAM program = {0};
+static struct hashmap_s program_map;
+static int program_map_initialized = 0;
+
+VKPROGRAM* createProgram(VKCTX ctx, const char* shader_path){
+    printf("Shader path: %s\n", shader_path);
+    if (!program_map_initialized) {
+        if (0 != hashmap_create(1, &program_map)) {
+            printf("Error creating hashmap for program cache.\n");
+            exit(1);
+        }
+        program_map_initialized = 1;
+    }
+    VKPROGRAM* cached = hashmap_get(&program_map, shader_path, strlen(shader_path));
+    if (cached) return cached;
+
+    VKPROGRAM* program = XMALLOC(sizeof(VKPROGRAM));
     ShaderInfo shader_info = readShader(shader_path);
-    program.buffer_indices = shader_info.buffer_indices;
-    program.buffer_types = shader_info.buffer_types;
-    program.binding_read_write_limitations = shader_info.binding_read_write_limitations;
-    program.descriptor_set_layout = getOrCreateDescriptorSetLayout(ctx, shader_info);
-    program.pipeline_layout = getOrCreatePipelineLayout(ctx, program.descriptor_set_layout);
-    program.pipeline = createPipeline(ctx, program.pipeline_layout, shader_info);
+    program->buffer_count = shader_info.buffer_count;
+    memcpy(program->buffer_types, shader_info.buffer_types, sizeof(VkDescriptorType) * shader_info.buffer_count);
+    memcpy(program->buffer_indices, shader_info.buffer_indices, sizeof(uint32_t) * shader_info.buffer_count);
+    memcpy(program->binding_read_write_limitations, shader_info.binding_read_write_limitations, sizeof(VkDescriptorType) * shader_info.buffer_count);
+    program->descriptor_set_layout = getDescriptorSetLayout(ctx, shader_info);
+    program->pipeline_layout = getPipelineLayout(ctx, program->descriptor_set_layout);
+    program->pipeline = createPipeline(ctx, program->pipeline_layout, shader_info);
+    hashmap_put(&program_map, shader_path, strlen(shader_path), program);
+    free(shader_info.buffer_types);
+    free(shader_info.buffer_indices);
+    free(shader_info.binding_read_write_limitations);
     return program;
 }
 
-#define DECAY_MAX      127          /* 7-bit saturating counter */
-#define DECAY_INTERVAL 64           /* decay once every 64 cache lookups */
-
-static uint32_t accessCount = 0;    /* fine-grain counter */
-static inline uint8_t sat(int v) { return (v < 0) ? 0 : (v > DECAY_MAX ? DECAY_MAX : v); }
-
-typedef struct{
-    VKBUFFER* buffers;
-    uint32_t buffer_count;
-    VkDescriptorSet descriptor_set;
-    bool in_use;
-    uint8_t usage;
-} DescEntry;
-
-DescEntry* desc_cache = NULL;
-static size_t desc_cache_cnt = 0;
-static bool allocateDescriptorSet(VkDevice dev, VkDescriptorPool pool, VkDescriptorSetLayout layout, VkDescriptorSet *out){
-    VkDescriptorSetAllocateInfo ai = {
-        .sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-        .descriptorPool     = pool,
-        .descriptorSetCount = 1,
-        .pSetLayouts        = &layout
-    };
-    return vkAllocateDescriptorSets(dev, &ai, out) == VK_SUCCESS;
-}
+static struct hashmap_s descriptor_map;
+static int descriptor_map_initialized = 0;
 
 //Note: Buffers are in order of bindings so their index in the array corresponds to their binding idx.
-void useBuffers(VKCTX ctx, VKPROGRAM *prog, VKBUFFER *buffers, uint32_t buf_count){
-    /* ---- 1.  LRU decay ---------------------------------------- */
-    if (++accessCount >= DECAY_INTERVAL) {
-        accessCount = 0;
-        for (size_t i = 0; i < desc_cache_cnt; ++i)
-            desc_cache[i].usage >>= 1;
-    }
-
-    /* ---- 2.  fast hit ----------------------------------------- */
-    for (size_t i = 0; i < desc_cache_cnt; ++i) {
-        DescEntry *e = &desc_cache[i];
-        if (e->buffer_count == buf_count &&
-            memcmp(e->buffers, buffers, buf_count * sizeof(VKBUFFER)) == 0)
-        {
-            e->usage = DECAY_MAX;
-            prog->descriptor_set = e->descriptor_set;
-            /* update client copy */
-            free(prog->buffers);
-            prog->buffers     = XMALLOC(buf_count * sizeof(VKBUFFER));
-            prog->buffer_count = buf_count;
-            memcpy(prog->buffers, buffers, buf_count * sizeof(VKBUFFER));
-            return;
+void useBuffers(VKCTX ctx, VKPROGRAM* program, VKBUFFER* buffers, size_t buffer_count){
+    if (!descriptor_map_initialized) {
+        if (0 != hashmap_create(1, &descriptor_map)) {
+            printf("Error creating hashmap for program cache.\n");
+            exit(1);
         }
+        descriptor_map_initialized = 1;
     }
 
-    /* ---- 3.  choose victim ------------------------------------ */
-    int victim = -1;
-    uint8_t min_usage = UINT8_MAX;
-    for (size_t i = 0; i < desc_cache_cnt; ++i) {
-        DescEntry *e = &desc_cache[i];
-        if (!e->in_use && e->usage < min_usage) {
-            min_usage = e->usage;
-            victim    = (int)i;
-        }
+    VkDescriptorSet* cached = hashmap_get(&descriptor_map, buffers, buffer_count * sizeof(VKBUFFER));
+    if (cached) {
+        memcpy(program->buffers, buffers, buffer_count * sizeof(VKBUFFER));
+        program->descriptor_set = *cached;
+        return;
     }
 
-    /* ---- 4.  allocate descriptor set -------------------------- */
-    VkDescriptorSet newSet;
-    bool ok = allocateDescriptorSet(ctx.device, ctx.descriptor_pool, prog->descriptor_set_layout, &newSet);
-    if (!ok && victim == -1) {
-        fprintf(stderr, "Out of descriptor sets and no victim!\n");
-        exit(1);                       /* or return false */
-    }
+    VkDescriptorSet* newSet = XMALLOC(sizeof(VkDescriptorSet));
+    VkDescriptorSetAllocateInfo ai = {
+        .sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool     = ctx.descriptor_pool,
+        .descriptorSetCount = 1,
+        .pSetLayouts        = &program->descriptor_set_layout
+    };
+    VK_CHECK(vkAllocateDescriptorSets(ctx.device, &ai, newSet));
 
-    if (!ok) {                         /* re-use victim set */
-        newSet = desc_cache[victim].descriptor_set;
-        free(desc_cache[victim].buffers);
-    } else if (victim == -1) {         /* need to grow cache */
-        XREALLOC(desc_cache, (desc_cache_cnt + 1) * sizeof(*desc_cache));
-
-        victim = (int)desc_cache_cnt++;
-    } else {                           /* overwrite victim slot */
-        free(desc_cache[victim].buffers);
-    }
-
-    /* ---- 5.  fill new cache entry ----------------------------- */
-    DescEntry *slot = &desc_cache[victim];
-    slot->buffers      = XMALLOC(buf_count * sizeof(VKBUFFER));
-    slot->buffer_count = buf_count;
-    slot->descriptor_set = newSet;
-    slot->in_use       = false;
-    slot->usage        = DECAY_MAX;
-    memcpy(slot->buffers, buffers, buf_count * sizeof(VKBUFFER));
-
-    /* ---- 6.  write descriptors -------------------------------- */
-    VkDescriptorBufferInfo infos[buf_count];
-    VkWriteDescriptorSet   writes[buf_count];
-    for (uint32_t b = 0; b < buf_count; ++b) {
+    VkDescriptorBufferInfo infos[buffer_count];
+    VkWriteDescriptorSet   writes[buffer_count];
+    uint32_t b;
+    for (b = 0; b < buffer_count; ++b) {
         infos[b] = (VkDescriptorBufferInfo){
             .buffer = buffers[b].buffer,
             .offset = 0,
@@ -405,30 +324,76 @@ void useBuffers(VKCTX ctx, VKPROGRAM *prog, VKBUFFER *buffers, uint32_t buf_coun
         };
         writes[b] = (VkWriteDescriptorSet){
             .sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-            .dstSet          = newSet,
-            .dstBinding      = prog->buffer_indices[b],
+            .dstSet          = *newSet,
+            .dstBinding      = program->buffer_indices[b],
             .descriptorCount = 1,
-            .descriptorType  = prog->buffer_types[b],
+            .descriptorType  = program->buffer_types[b],
             .pBufferInfo     = &infos[b]
         };
     }
-    vkUpdateDescriptorSets(ctx.device, buf_count, writes, 0, NULL);
-
-    /* ---- 7.  publish to program ------------------------------- */
-    prog->descriptor_set = newSet;
-    free(prog->buffers);
-    prog->buffers       = XMALLOC(buf_count * sizeof(VKBUFFER));
-    prog->buffer_count  = buf_count;
-    memcpy(prog->buffers, buffers, buf_count * sizeof(VKBUFFER));
+    vkUpdateDescriptorSets(ctx.device, buffer_count, writes, 0, NULL);
+    VKBUFFER* buffers_heap = XMALLOC(buffer_count * sizeof(VKBUFFER));
+    memcpy(buffers_heap, buffers, buffer_count * sizeof(VKBUFFER));
+    hashmap_put(&descriptor_map, buffers_heap, buffer_count * sizeof(VKBUFFER), newSet);
+    memcpy(program->buffers, buffers, buffer_count * sizeof(VKBUFFER));
+    program->descriptor_set = *newSet;
 }
 
-void destroyProgram(VKCTX ctx, VKPROGRAM* program){
+void destroyProgram(VKCTX ctx, const char* shader_path){
+    if (!program_map_initialized) {
+        if (0 != hashmap_create(1, &program_map)) {
+            printf("Error creating hashmap for program cache.\n");
+            exit(1);
+        }
+        program_map_initialized = 1;
+    }
+
+    VKPROGRAM* program = hashmap_get(&program_map, shader_path, strlen(shader_path));
+    if (!program) return;
     vkDestroyPipeline(ctx.device, program->pipeline, NULL);
     vkDestroyPipelineLayout(ctx.device, program->pipeline_layout, NULL);
     vkDestroyDescriptorSetLayout(ctx.device, program->descriptor_set_layout, NULL);
-    free(program->buffer_types);
-    free(program->buffer_indices);
-    free(program->buffers);
-    free(program->binding_read_write_limitations);
-    memset(program, 0, sizeof(*program));
+    free(program);
+    hashmap_remove(&program_map, shader_path, strlen(shader_path));
+}
+
+#include <stdio.h>
+
+// Define this to match your actual enum
+const char* bindingLimitationToString(BindingLimitations lim) {
+    switch(lim) {
+        case READ_ONLY: return "READ_ONLY";
+        case WRITE_ONLY: return "WRITE_ONLY";
+        case READ_AND_WRITE: return "READ_AND_WRITE";
+        default: return "UNKNOWN";
+    }
+}
+
+void verifyVKPROGRAM(VKPROGRAM* prog) {
+    if (!prog) {
+        printf("❌ VKPROGRAM is NULL\n");
+        return;
+    }
+
+    printf("\n=== VKPROGRAM Verification ===\n");
+    printf("Struct address: %p\n", (void*)prog);
+    printf("descriptor_set_layout: %p\n", (void*)prog->descriptor_set_layout);
+    printf("pipeline_layout:       %p\n", (void*)prog->pipeline_layout);
+    printf("pipeline:              %p\n", (void*)prog->pipeline);
+    printf("descriptor_set:        %p\n", (void*)prog->descriptor_set);
+    printf("buffer_count:          %zu\n", prog->buffer_count);
+
+    if (prog->buffer_count > MAX_BUFFERS) {
+        printf("❌ buffer_count (%zu) exceeds MAX_BUFFERS!\n", prog->buffer_count);
+        return;
+    }
+
+    for (size_t i = 0; i < prog->buffer_count; i++) {
+        printf("\n  Buffer [%zu]:\n", i);
+        printf("    binding index:     %u\n", prog->buffer_indices[i]);
+        printf("    descriptor type:   %u (7=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)\n", prog->buffer_types[i]);
+        printf("    buffer handle:     %p\n", (void*)prog->buffers[i].buffer);
+        printf("    binding limit:     %s\n", bindingLimitationToString(prog->binding_read_write_limitations[i]));
+    }
+    printf("================================\n\n");
 }
