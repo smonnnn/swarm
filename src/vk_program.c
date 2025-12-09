@@ -36,51 +36,6 @@ VkPipelineLayout getPipelineLayout(VKCTX ctx, VkDescriptorSetLayout setLayout){
     return plo;
 }
 
-void findAccessLimits(VKPROGRAM* program, uint32_t* spirv, size_t words){
-    if(words < 5 || spirv[0] != 0x07230203) return NULL;
-    uint32_t bound = spirv[3];
-
-    uint32_t id_to_binding[bound];
-    uint32_t id_to_read_write_limitations[bound];
-    uint32_t id_to_buffer_type[bound];
-    memset(id_to_binding, -1, bound * sizeof(uint32_t));
-    memset(id_to_read_write_limitations, -1, bound * sizeof(uint32_t));
-    memset(id_to_buffer_type, -1, bound * sizeof(uint32_t));
-
-    int p = 5;
-    while(p < words){
-        uint32_t opLen = spirv[p] >> 16;;
-        uint32_t op  = spirv[p] & 0xFFFFu;
-
-        if (op == 71){ //OpDecorate
-            if(spirv[p+2] == 33){ // Binding
-                id_to_binding[spirv[p+1]] = spirv[p+3]; //only supports one set.
-            }
-        }
-        if (op == 71){ //OpDecorate
-            bool readOnly = spirv[p+2] == 24;
-            bool writeOnly = spirv[p+2] == 25;
-            if(readOnly || writeOnly){
-                id_to_read_write_limitations[spirv[p+1]] = readOnly ? READ_ONLY : WRITE_ONLY;
-            }
-        }
-        p += opLen;
-    }
-
-    program->buffer_count = 0;
-    for (int i = 0; i < bound; i++){
-        if(id_to_binding[i] != -1){
-            if(program->buffer_count >= MAX_BUFFERS) {
-                printf("Shader exceeds MAX_BUFFERS.\n");
-                exit(0);
-            }
-            program->binding_read_write_limitations[program->buffer_count] = id_to_read_write_limitations[i];
-            program->buffer_types[program->buffer_count] = id_to_buffer_type[i];
-            program->buffer_count++;
-        }
-    }
-}
-
 ShaderInfo readShader(VKPROGRAM* program, const char* shader_path){
     ShaderInfo s = {0};
 
