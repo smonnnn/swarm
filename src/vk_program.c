@@ -43,7 +43,6 @@ static inline uint32_t length(const uint32_t* p, size_t off) { return p[off] >> 
 ShaderInfo readShader(VKPROGRAM* program, const char* shader_path){
     ShaderInfo s = {0};
 
-    //Read file.
     FILE* f = fopen(shader_path, "rb");
     if (!f) {
         printf("Could not open path: %s\n", shader_path);

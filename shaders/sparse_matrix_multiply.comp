@@ -13,7 +13,7 @@ layout(binding = 5) readonly buffer Weigths         {float weights[];};
 
 void main() {
     uint r  = gl_GlobalInvocationID.x;
-    if (r >= start_positions.length()) return;
+    if (r >= update_idxs.length()) return;
     r = update_idxs[r];
 
     uint beg = start_positions[r];

@@ -1,0 +1,28 @@
+#version 450
+#extension GL_EXT_shader_atomic_float : require
+#extension GL_EXT_nonuniform_qualifier : enable
+#define CHUNK_SIZE 16
+layout(local_size_x = 64) in;
+
+layout(binding = 0) readonly buffer Input     {float inputs[];};
+layout(binding = 1) writeonly buffer Output   {float outputs[];};
+layout(binding = 2) readonly buffer Mappings  {uint from[];};
+layout(binding = 3) readonly buffer Active    {uint active_chunks[];};
+
+layout(binding = 4) readonly buffer Chunks  {
+    float weights[CHUNK_SIZE];
+    uint to[CHUNK_SIZE];
+} chunks[];
+
+void main() {
+    uint r  = gl_GlobalInvocationID.x;
+    if (r >= active_chunks.length()) return;
+    uint chunk_idx = active_chunks[r];
+    float v = from[chunk_idx];
+
+    for (uint i = 0; i < CHUNK_SIZE; ++i) {
+        float w = chunks[chunk_idx].weights[i];
+        uint to = chunks[chunk_idx].to[i];
+        atomicAdd(outputs[to], v * w);
+    }
+}

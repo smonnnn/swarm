@@ -13,6 +13,17 @@
    values     = {1, 2, 3, 4, 5, 6}
    -------------------------------------------*/
 
+typedef struct{
+   uint32_t start_idxs_count;
+   uint32_t start_idxs;
+
+   uint32_t to_idxs_count;
+   uint32_t to_idxs;
+
+   uint32_t weights_count;
+   float weights;
+} SparseMatrix;
+
 int main(){
     const char* spirv_path = "./shaders/compiled/sparse_matrix_multiply.spv";
 
