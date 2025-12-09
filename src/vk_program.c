@@ -150,7 +150,7 @@ VKPROGRAM createProgram(VKCTX ctx, const char* shader_path){
     if (cached) return *cached;
 
     VKPROGRAM* program = XMALLOC(sizeof(VKPROGRAM));
-    ShaderInfo shader_info = readShader(shader_path);
+    ShaderInfo shader_info = readShader(program, shader_path);
     program->descriptor_set_layout = getDescriptorSetLayout(ctx, program, shader_info);
     program->pipeline_layout = getPipelineLayout(ctx, program->descriptor_set_layout);
     program->pipeline = createPipeline(ctx, program->pipeline_layout, shader_info);
