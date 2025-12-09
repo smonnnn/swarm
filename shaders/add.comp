@@ -1,17 +1,9 @@
 #version 450
 layout(local_size_x = 64) in;
 
-layout(binding = 0) buffer BufA {
-    float valuesA[];
-};
-
-layout(binding = 1) buffer BufB {
-    float valuesB[];
-};
-
-layout(binding = 2) buffer BufC {
-    float outputs[];
-};
+layout(binding = 0) readonly  buffer BufA { float valuesA[]; };
+layout(binding = 1) readonly  buffer BufB { float valuesB[]; };
+layout(binding = 2) writeonly buffer BufC { float outputs[]; };
 
 void main() {
     uint i = gl_GlobalInvocationID.x;

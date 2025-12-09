@@ -36,9 +36,16 @@ gcc -c -O2 -Wall -fPIC \
     -I/usr/include/vulkan \
     -o build/vk_program.o
 
+echo "Compiling spirv_reflect.c..."
+gcc -c -O2 -Wall -fPIC \
+    src/include/spirv_reflect.c \
+    -Isrc \
+    -I/usr/include/vulkan \
+    -o build/spirv_reflect.o
+
 # Create static library
 echo "Creating static library..."
-ar rcs build/libswarm.a build/vk_setup.o build/vk_buffer.o build/vk_command.o build/vk_program.o
+ar rcs build/libswarm.a build/vk_setup.o build/vk_buffer.o build/vk_command.o build/vk_program.o build/spirv_reflect.o
 
 echo "Build complete!"
 echo "Library: build/libswarm.a"

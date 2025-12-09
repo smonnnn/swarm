@@ -36,6 +36,10 @@ VkPipelineLayout getPipelineLayout(VKCTX ctx, VkDescriptorSetLayout setLayout){
     return plo;
 }
 
+static inline uint32_t word(const uint32_t* p, size_t off) { return p[off]; }
+static inline uint32_t opcode(const uint32_t* p, size_t off) { return p[off] & 0xFFFFu; }
+static inline uint32_t length(const uint32_t* p, size_t off) { return p[off] >> 16; }
+
 ShaderInfo readShader(VKPROGRAM* program, const char* shader_path){
     ShaderInfo s = {0};
 
@@ -65,8 +69,12 @@ ShaderInfo readShader(VKPROGRAM* program, const char* shader_path){
     spvReflectEnumerateDescriptorBindings(&mod, &count, &binds);
 
     program->buffer_count = count;
+    if(strlen(mod.entry_point_name) == 1){
+        mod.entry_point_name = "main";
+    }
     s.entrypoint = XMALLOC(strlen(mod.entry_point_name) + 1);
     strcpy(s.entrypoint, mod.entry_point_name);
+    
     s.spirv_bytecode = code;
     s.spirv_bytecode_length = code_size;
     for (uint32_t i = 0; i < count; ++i) {
@@ -97,7 +105,6 @@ ShaderInfo readShader(VKPROGRAM* program, const char* shader_path){
         }
     }
 
-    free(binds);
     spvReflectDestroyShaderModule(&mod);
     return s;
 }
