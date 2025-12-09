@@ -65,25 +65,25 @@ ShaderInfo readShader(VKPROGRAM* program, const char* shader_path){
 
     uint32_t count = 0;
     spvReflectEnumerateDescriptorBindings(&mod, &count, NULL);
-    SpvReflectDescriptorBinding* binds = malloc(count * sizeof(*binds));
-    spvReflectEnumerateDescriptorBindings(&mod, &count, &binds);
+    SpvReflectDescriptorBinding** binds = XMALLOC(count * sizeof *binds);
+    spvReflectEnumerateDescriptorBindings(&mod, &count, binds);;
 
     program->buffer_count = count;
-    if(strlen(mod.entry_point_name) == 1){
-        mod.entry_point_name = "main";
+    if(!(mod.entry_point_name) || strlen(mod.entry_point_name) == 1){
+        s.entrypoint = "main";
+    } else {
+        s.entrypoint = XMALLOC(strlen(mod.entry_point_name) + 1);
+        strcpy(s.entrypoint, mod.entry_point_name);
     }
-    s.entrypoint = XMALLOC(strlen(mod.entry_point_name) + 1);
-    strcpy(s.entrypoint, mod.entry_point_name);
-    
-    s.spirv_bytecode = code;
+
+    s.spirv_bytecode = XMALLOC(code_size);
+    memcpy(s.spirv_bytecode, code, code_size);
     s.spirv_bytecode_length = code_size;
     for (uint32_t i = 0; i < count; ++i) {
-        const SpvReflectDescriptorBinding* b = &binds[i];
-
-        program->buffer_indices[i] = b->binding;
+        program->buffer_indices[i] = binds[i]->binding;
 
         /* map descriptor type */
-        switch (b->descriptor_type) {
+        switch (binds[i]->descriptor_type) {
         case SPV_REFLECT_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
             program->buffer_types[i] = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
             break;
@@ -96,8 +96,8 @@ ShaderInfo readShader(VKPROGRAM* program, const char* shader_path){
         }
 
         /* map read/write usage */
-        bool readOnly  = (b->decoration_flags & SPV_REFLECT_DECORATION_NON_WRITABLE);
-        bool writeOnly = (b->accessed & SPV_REFLECT_DECORATION_NON_READABLE);
+        bool readOnly  = (binds[i]->decoration_flags & SPV_REFLECT_DECORATION_NON_WRITABLE);
+        bool writeOnly = (binds[i]->accessed & SPV_REFLECT_DECORATION_NON_READABLE);
 
         program->binding_read_write_limitations[i] = READ_AND_WRITE;
         if (readOnly || writeOnly){
@@ -136,7 +136,6 @@ VkPipeline createPipeline(VKCTX ctx, VkPipelineLayout pipelineLayout, ShaderInfo
 
     vkDestroyShaderModule(ctx.device, shader, NULL);
     free(shader_info.spirv_bytecode);
-    free(shader_info.entrypoint);
     shader_info.spirv_bytecode_length = 0;
     return pipeline;
 }
@@ -157,7 +156,9 @@ VKPROGRAM createProgram(VKCTX ctx, const char* shader_path){
     if (cached) return *cached;
 
     VKPROGRAM* program = XMALLOC(sizeof(VKPROGRAM));
+    printf("A\n");
     ShaderInfo shader_info = readShader(program, shader_path);
+    printf("A\n");
     program->descriptor_set_layout = getDescriptorSetLayout(ctx, program, shader_info);
     program->pipeline_layout = getPipelineLayout(ctx, program->descriptor_set_layout);
     program->pipeline = createPipeline(ctx, program->pipeline_layout, shader_info);
@@ -252,7 +253,7 @@ const char* bindingLimitationToString(BindingLimitations lim) {
 
 void verifyVKPROGRAM(VKPROGRAM* prog) {
     if (!prog) {
-        printf("❌ VKPROGRAM is NULL\n");
+        printf("VKPROGRAM is NULL\n");
         return;
     }
 
@@ -265,7 +266,7 @@ void verifyVKPROGRAM(VKPROGRAM* prog) {
     printf("buffer_count:          %zu\n", prog->buffer_count);
 
     if (prog->buffer_count > MAX_BUFFERS) {
-        printf("❌ buffer_count (%zu) exceeds MAX_BUFFERS!\n", prog->buffer_count);
+        printf("buffer_count (%zu) exceeds MAX_BUFFERS!\n", prog->buffer_count);
         return;
     }
 

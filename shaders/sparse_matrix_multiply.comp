@@ -3,13 +3,13 @@
 
 layout(local_size_x = 64) in;
 
-layout(binding = 0) buffer Input        {float inputs[];};
-layout(binding = 1) buffer Output       {float outputs[];};
-layout(binding = 2) buffer Operations   {uint update_idxs[];};
+layout(binding = 0) readonly buffer Input           {float inputs[];};
+layout(binding = 1) writeonly buffer Output         {float outputs[];};
+layout(binding = 2) readonly buffer Operations      {uint update_idxs[];};
 
-layout(binding = 3) buffer StartPositions   {uint start_positions[];};
-layout(binding = 4) buffer ToIndices        {uint to_indices[];};
-layout(binding = 5) buffer Weigths          {float weights[];};
+layout(binding = 3) readonly buffer StartPositions  {uint start_positions[];};
+layout(binding = 4) readonly buffer ToIndices       {uint to_indices[];};
+layout(binding = 5) readonly buffer Weigths         {float weights[];};
 
 void main() {
     uint r  = gl_GlobalInvocationID.x;

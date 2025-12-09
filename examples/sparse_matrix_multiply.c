@@ -53,7 +53,7 @@ int main(){
     VKBUFFER buf_weights  = newBuffer(ctx, wSz,   BUF_GPU);
 
     /* ---- CPU staging / read-back ---------------------------------------- */
-    VKBUFFER cpu_stage    = newBuffer(ctx, inSz > outSz ? inSz : outSz, BUF_CPU);
+    VKBUFFER cpu_stage    = newBuffer(ctx, 128, BUF_CPU);
 
     /* ---- upload host data to GPU -----------------------------------------
        Exactly the same pattern used in add.c: map, memcpy, unmap, copy.     */
