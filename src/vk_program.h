@@ -26,10 +26,6 @@ typedef struct{
 
 typedef struct{
     char* entrypoint;
-    BindingLimitations* binding_read_write_limitations;
-    VkDescriptorType* buffer_types;
-    uint32_t* buffer_indices;
-    size_t buffer_count;
     uint32_t* spirv_bytecode;
     size_t spirv_bytecode_length;
 } ShaderInfo;

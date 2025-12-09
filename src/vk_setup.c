@@ -1,11 +1,11 @@
 #include "vk_setup.h"
 
-VkInstance createInstance() {
+VkInstance createInstance(const char** extensions, uint32_t extensionCount) {
     VkApplicationInfo appInfo = {
         .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
-        .pApplicationName = "Compute Vulkan App",
+        .pApplicationName = "SWARM",
         .applicationVersion = VK_MAKE_VERSION(1, 0, 0),
-        .pEngineName = "None",
+        .pEngineName = "SWARM",
         .engineVersion = VK_MAKE_VERSION(1, 0, 0),
         .apiVersion = VK_API_VERSION_1_2,
     };
@@ -13,6 +13,8 @@ VkInstance createInstance() {
     VkInstanceCreateInfo info = {
         .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
         .pApplicationInfo = &appInfo,
+        .enabledExtensionCount = extensionCount,
+        .ppEnabledExtensionNames = extensions,
     };
 
     VkInstance instance;
@@ -74,7 +76,7 @@ int32_t getQueueFamily(VkPhysicalDevice device, int32_t flags) {
     return result;
 }
 
-VkDevice createLogicalDevice(VkPhysicalDevice phys, uint32_t computeFamily) {
+VkDevice createLogicalDevice(VkPhysicalDevice phys, uint32_t computeFamily, void* create_info_pnext, const char** extensions, uint32_t extensionCount) {
     float priority = 1.0f;
 
     VkDeviceQueueCreateInfo queueInfo = {
@@ -84,21 +86,17 @@ VkDevice createLogicalDevice(VkPhysicalDevice phys, uint32_t computeFamily) {
         .pQueuePriorities = &priority,
     };
 
-    VkPhysicalDeviceBufferDeviceAddressFeatures bda = {
-        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES,
-        .bufferDeviceAddress = VK_TRUE
-    };
-
     VkDeviceCreateInfo deviceInfo = {
         .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
         .queueCreateInfoCount = 1,
         .pQueueCreateInfos = &queueInfo,
-        .pNext = &bda
+        .pNext = create_info_pnext,
+        .enabledExtensionCount = extensionCount,
+        .ppEnabledExtensionNames = extensions,
     };
 
     VkDevice device;
     VK_CHECK(vkCreateDevice(phys, &deviceInfo, NULL, &device));
-
     return device;
 }
 
@@ -139,15 +137,51 @@ VkCommandPool createCommandPool(VkDevice device, uint32_t queueIndex){
 }
 
 VKCTX createVkContext(){
+    const char* instanceExts[] = {
+        VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
+        VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,
+    };
+
+    const char* deviceExts[] = {
+        VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME,
+        VK_EXT_SHADER_ATOMIC_FLOAT_EXTENSION_NAME, //atomic float
+        //VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME,
+        //VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
+        //VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME,
+        //VK_KHR_SPIRV_1_4_EXTENSION_NAME,
+        //VK_EXT_MEMORY_BUDGET_EXTENSION_NAME,
+        //VK_KHR_MAINTENANCE_4_EXTENSION_NAME,
+    };
+
+    VkPhysicalDeviceShaderAtomicFloatFeaturesEXT atomic_float_featues = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_FEATURES_EXT,
+        .pNext = NULL,
+        .shaderBufferFloat32Atomics = VK_TRUE,      // For buffer atomics
+        .shaderBufferFloat32AtomicAdd = VK_TRUE,    // For atomicAdd() on buffers
+        .shaderSharedFloat32Atomics = VK_TRUE,      // For shared memory atomics
+        .shaderSharedFloat32AtomicAdd = VK_TRUE,    // For atomicAdd() in shared memory
+    };
+
+    VkPhysicalDeviceVulkan13Features vk13 = {0};
+    vk13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+    vk13.pNext = &atomic_float_featues;
+
+    VkPhysicalDeviceVulkan12Features vk12 = {0};
+    vk12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+    vk12.pNext = &vk13;
+    vk12.bufferDeviceAddress = VK_TRUE;
+    vk12.descriptorIndexing = VK_TRUE;
+    vk12.timelineSemaphore = VK_TRUE;
+
     VKCTX ctx = {0};
     printf("Creating instance...\n");
-    ctx.instance = createInstance();
+    ctx.instance = createInstance(instanceExts, sizeof(instanceExts) / sizeof(char*));
     printf("Picking device...\n");
     ctx.physical_device = userPickDevice(ctx.instance);
     printf("Selecting compute queue family...\n");
     ctx.queue_family_idx = getQueueFamily(ctx.physical_device, VK_QUEUE_COMPUTE_BIT);
     printf("Creating logical device...\n");
-    ctx.device = createLogicalDevice(ctx.physical_device, ctx.queue_family_idx);
+    ctx.device = createLogicalDevice(ctx.physical_device, ctx.queue_family_idx, &vk12, deviceExts, sizeof(deviceExts) / sizeof(char*));
     printf("Picking queue...\n");
     ctx.queue = getQueue(ctx.device, ctx.queue_family_idx);
     printf("Creating descriptor pool...\n");

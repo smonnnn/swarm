@@ -1,12 +1,13 @@
 #include "vk_program.h"
-#include "helpers/hashmap.h"
+#include "include/hashmap.h"
+#include "include/spirv_reflect.h"
 
-VkDescriptorSetLayout getDescriptorSetLayout(VKCTX ctx, ShaderInfo s){
-    VkDescriptorSetLayoutBinding bindings[s.buffer_count];
-    for (uint32_t i = 0; i < s.buffer_count; ++i) {
+VkDescriptorSetLayout getDescriptorSetLayout(VKCTX ctx, VKPROGRAM* program, ShaderInfo s){
+    VkDescriptorSetLayoutBinding bindings[program->buffer_count];
+    for (uint32_t i = 0; i < program->buffer_count; ++i) {
         bindings[i] = (VkDescriptorSetLayoutBinding){
-            .binding         = s.buffer_indices[i],   // slot index
-            .descriptorType  = s.buffer_types[i],     // SSBO, UBO, image, …
+            .binding         = program->buffer_indices[i],   // slot index
+            .descriptorType  = program->buffer_types[i],     // SSBO, UBO, image, …
             .descriptorCount = 1,                     // array size (1 = single)
             .stageFlags      = VK_SHADER_STAGE_COMPUTE_BIT,
             .pImmutableSamplers = NULL
@@ -15,7 +16,7 @@ VkDescriptorSetLayout getDescriptorSetLayout(VKCTX ctx, ShaderInfo s){
 
     VkDescriptorSetLayoutCreateInfo info = {
         .sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-        .bindingCount = s.buffer_count,
+        .bindingCount = program->buffer_count,
         .pBindings    = bindings,
     };
 
@@ -35,189 +36,114 @@ VkPipelineLayout getPipelineLayout(VKCTX ctx, VkDescriptorSetLayout setLayout){
     return plo;
 }
 
-static inline uint32_t word(const uint32_t* p, size_t off) { return p[off]; }
-static inline uint32_t opcode(const uint32_t* p, size_t off) { return p[off] & 0xFFFFu; }
-static inline uint32_t length(const uint32_t* p, size_t off) { return p[off] >> 16; }
+void findAccessLimits(VKPROGRAM* program, uint32_t* spirv, size_t words){
+    if(words < 5 || spirv[0] != 0x07230203) return NULL;
+    uint32_t bound = spirv[3];
 
-static VkDescriptorType classify(int storageClass, int dataOp, const uint32_t* code, size_t dataOff){
-    (void)code; (void)dataOff;   /* unused in this minimal version */
+    uint32_t id_to_binding[bound];
+    uint32_t id_to_read_write_limitations[bound];
+    uint32_t id_to_buffer_type[bound];
+    memset(id_to_binding, -1, bound * sizeof(uint32_t));
+    memset(id_to_read_write_limitations, -1, bound * sizeof(uint32_t));
+    memset(id_to_buffer_type, -1, bound * sizeof(uint32_t));
 
-    switch (storageClass) {
-    //case 9:  return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;              /* PushConstant */
-    case 12: return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;              /* Uniform block   */
-    case 11: return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;              /* StorageBuffer   */
-    case 2:  {                                                      /* UniformConstant */
-        if (dataOp == 25) {                                         /* OpTypeImage */
-            /* sampled flag is word 6 of OpTypeImage */
-            uint32_t sampled = (dataOff < 64) ? 1 : 0; 
-            return sampled ? VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE
-                           : VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+    int p = 5;
+    while(p < words){
+        uint32_t opLen = spirv[p] >> 16;;
+        uint32_t op  = spirv[p] & 0xFFFFu;
+
+        if (op == 71){ //OpDecorate
+            if(spirv[p+2] == 33){ // Binding
+                id_to_binding[spirv[p+1]] = spirv[p+3]; //only supports one set.
+            }
         }
-        if (dataOp == 26) return VK_DESCRIPTOR_TYPE_SAMPLER;
-        if (dataOp == 27) return VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        break;
+        if (op == 71){ //OpDecorate
+            bool readOnly = spirv[p+2] == 24;
+            bool writeOnly = spirv[p+2] == 25;
+            if(readOnly || writeOnly){
+                id_to_read_write_limitations[spirv[p+1]] = readOnly ? READ_ONLY : WRITE_ONLY;
+            }
+        }
+        p += opLen;
     }
+
+    program->buffer_count = 0;
+    for (int i = 0; i < bound; i++){
+        if(id_to_binding[i] != -1){
+            if(program->buffer_count >= MAX_BUFFERS) {
+                printf("Shader exceeds MAX_BUFFERS.\n");
+                exit(0);
+            }
+            program->binding_read_write_limitations[program->buffer_count] = id_to_read_write_limitations[i];
+            program->buffer_types[program->buffer_count] = id_to_buffer_type[i];
+            program->buffer_count++;
+        }
     }
-    return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 }
 
-ShaderInfo readShader(const char* shader_path){
+ShaderInfo readShader(VKPROGRAM* program, const char* shader_path){
     ShaderInfo s = {0};
 
-    /* ---- load file ---------------------------------------------- */
+    //Read file.
     FILE* f = fopen(shader_path, "rb");
     if (!f) {
         printf("Could not open path: %s\n", shader_path);
         exit(0);
     }
     fseek(f, 0, SEEK_END);
-    size_t byteLen = ftell(f);
+    size_t code_size = ftell(f);
     rewind(f);
-    uint32_t* code = (uint32_t*)XMALLOC(byteLen);
-    fread(code, 1, byteLen, f);
-    if (byteLen < 20 || code[0] != 0x07230203) {
-        fclose(f);
-        printf("Attempting to read malformed spirv file.\n");
-        exit(0);
-    }
+    uint32_t* code = (uint32_t*)XMALLOC(code_size);
+    fread(code, 1, code_size, f);
     fclose(f);
-    s.spirv_bytecode        = code;
-    s.spirv_bytecode_length = byteLen;
-    size_t wordCount = byteLen / 4;
-    uint32_t bound   = code[3];
 
-    /* ---- exact-size side tables --------------------------------- */
-    int id2binding[512] = {0};
-    int id2storage[512] = {0};
-    int id2dataOp[512]  = {0};   /* opcode of pointee */
-    int touched[512]    = {0};   /* binding→usage */
-    int ptr2base[512] = {0};
-
-    for (uint32_t i = 0; i < bound; ++i) id2binding[i] = -1;
-
-    /* ---- PASS 1 : types, decorations, variables --------------- */
-    size_t off = 5;
-    while (off < wordCount) {
-        uint32_t len = length(code, off);
-        uint32_t op  = opcode(code, off);
-
-        /* OpTypePointer */
-        if (op == 32) {
-            uint32_t id  = word(code, off + 1);
-            uint32_t sc  = word(code, off + 2);
-            uint32_t pte = word(code, off + 3);
-            id2storage[id] = sc;
-            id2dataOp[id]  = opcode(code, pte); /* will refine below */
-        }
-        /* OpTypeImage / OpTypeSampler / … */
-        if (op == 25 || op == 26 || op == 27) {
-            uint32_t id = word(code, off + 1);
-            id2dataOp[id] = op;
-        }
-
-        /* OpDecorate … Binding */
-        if (op == 71 && word(code, off + 2) == 33) {
-            uint32_t target = word(code, off + 1);
-            uint32_t bind   = word(code, off + 3);
-            if (target < bound && bind < 256) id2binding[target] = bind;
-        }
-
-        /* OpVariable */
-        if (op == 59) {
-            uint32_t varId   = word(code, off + 2);
-            uint32_t ptrType = word(code, off + 1);
-            id2storage[varId] = id2storage[ptrType];
-            id2dataOp[varId]  = id2dataOp[ptrType];
-        }
-        if (op == 65) {
-            uint32_t result = word(code, off + 2);
-            uint32_t base   = word(code, off + 3);
-            ptr2base[result] = base;
-        }
-
-        off += len;
+    SpvReflectShaderModule mod;
+    SpvReflectResult res = spvReflectCreateShaderModule(code_size, code, &mod);
+    if (res != SPV_REFLECT_RESULT_SUCCESS) {
+        printf("SPIRV-Reflect failed for %s\n", shader_path);
+        exit(EXIT_FAILURE);
     }
 
-    /* ---- PASS 2 : mark reads / writes -------------------------- */
-    off = 5;
-    while (off < wordCount) {
-        uint32_t len = length(code, off);
-        uint32_t op  = opcode(code, off);
+    uint32_t count = 0;
+    spvReflectEnumerateDescriptorBindings(&mod, &count, NULL);
+    SpvReflectDescriptorBinding* binds = malloc(count * sizeof(*binds));
+    spvReflectEnumerateDescriptorBindings(&mod, &count, &binds);
 
-        if (op == 61 || op == 62) {               /* OpLoad or OpStore */
-            uint32_t ptr = word(code, off + (op == 61 ? 3 : 1));
+    program->buffer_count = count;
+    s.entrypoint = XMALLOC(strlen(mod.entry_point_name) + 1);
+    strcpy(s.entrypoint, mod.entry_point_name);
+    s.spirv_bytecode = code;
+    s.spirv_bytecode_length = code_size;
+    for (uint32_t i = 0; i < count; ++i) {
+        const SpvReflectDescriptorBinding* b = &binds[i];
 
-            /* follow access-chain table to base variable */
-            while (ptr && ptr2base[ptr]) ptr = ptr2base[ptr];
+        program->buffer_indices[i] = b->binding;
 
-            /* if base is decorated, mark the binding */
-            int b = (ptr < 512) ? id2binding[ptr] : -1;
-            if (b >= 0) touched[b] |= (op == 61 ? 1 : 2);
-        }
-        off += len;
-    }
-    const char *entry = NULL;
-    off = 5;
-    while (off < wordCount) {
-        uint32_t len = length(code, off);
-        uint32_t op  = opcode(code, off);
-        if (op == 71 && word(code, off + 2) == 71) { /* OpEntryPoint */
-            entry = (const char *)&code[off + 3];    /* word after execution model */
+        /* map descriptor type */
+        switch (b->descriptor_type) {
+        case SPV_REFLECT_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
+            program->buffer_types[i] = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+            break;
+        case SPV_REFLECT_DESCRIPTOR_TYPE_STORAGE_BUFFER:
+            program->buffer_types[i] = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            break;
+        default:   /* images / samplers / etc. */
+            program->buffer_types[i] = VK_DESCRIPTOR_TYPE_MAX_ENUM; /* or your fallback */
             break;
         }
-        off += len;
-    }
-    if (!entry) entry = "main";      /* sane default */
-    s.entrypoint = XMALLOC(strlen(entry) + 1);
-    strcpy(s.entrypoint, entry);
 
-    printf("---- all decorated IDs  ----\n");
-    for (uint32_t id = 0; id < bound; ++id)
-        if (id2binding[id] != -1)
-            printf("  id %3u  binding=%d\n", id, id2binding[id]);
+        /* map read/write usage */
+        bool readOnly  = (b->decoration_flags & SPV_REFLECT_DECORATION_NON_WRITABLE);
+        bool writeOnly = (b->accessed & SPV_REFLECT_DECORATION_NON_READABLE);
 
-    printf("---- all pointer IDs used by OpLoad/OpStore ----\n");
-    off = 5;
-    while (off < wordCount) {
-        uint32_t len = length(code, off);
-        uint32_t op  = opcode(code, off);
-        if (op == 61 || op == 62) {
-            uint32_t ptr = word(code, off + (op == 61 ? 3 : 1));
-            printf("  %s  pointer_id=%u\n", op == 61 ? "load" : "store", ptr);
+        program->binding_read_write_limitations[i] = READ_AND_WRITE;
+        if (readOnly || writeOnly){
+            program->binding_read_write_limitations[i] = readOnly ? READ_ONLY : WRITE_ONLY;
         }
-        off += len;
     }
 
-    /* ---- build output arrays ----------------------------------- */
-    size_t count = 0;
-    for (int b = 0; b < 256; ++b) if (touched[b]) ++count;
-
-    s.buffer_indices                    = (uint32_t*)           XMALLOC(count * sizeof(uint32_t));
-    s.binding_read_write_limitations    = (BindingLimitations*) XMALLOC(count * sizeof(BindingLimitations));
-    s.buffer_types                      = (VkDescriptorType*)   XMALLOC(count * sizeof(VkDescriptorType));
-    s.buffer_count = 0;
-
-    for (int b = 0; b < 256; ++b) {
-        if (!touched[b]) continue;
-        uint32_t var = 0;
-        /* find *any* variable with this binding so we can classify */
-        for (uint32_t id = 0; id < bound; ++id)
-            if (id2binding[id] == b) { var = id; break; }
-
-        s.buffer_indices[s.buffer_count] = b;
-        s.binding_read_write_limitations[s.buffer_count] = (touched[b] == 1) ? READ_ONLY : (touched[b] == 2) ? WRITE_ONLY : READ_AND_WRITE;
-        s.buffer_types[s.buffer_count] = classify(id2storage[var], id2dataOp[var], code, 0);
-        ++s.buffer_count;
-    }
-
-    printf("Read %u buffers from SPIRV bytecode\n", s.buffer_count);
-    for (uint32_t i = 0; i < s.buffer_count; ++i) {
-        printf("  [%u]  binding=%u  type=%d  limit=%d\n",
-            i,
-            s.buffer_indices[i],
-            (int)s.buffer_types[i],
-            (int)s.binding_read_write_limitations[i]);
-    }
+    free(binds);
+    spvReflectDestroyShaderModule(&mod);
     return s;
 }
 
@@ -270,17 +196,10 @@ VKPROGRAM createProgram(VKCTX ctx, const char* shader_path){
 
     VKPROGRAM* program = XMALLOC(sizeof(VKPROGRAM));
     ShaderInfo shader_info = readShader(shader_path);
-    program->buffer_count = shader_info.buffer_count;
-    memcpy(program->buffer_types, shader_info.buffer_types, sizeof(VkDescriptorType) * shader_info.buffer_count);
-    memcpy(program->buffer_indices, shader_info.buffer_indices, sizeof(uint32_t) * shader_info.buffer_count);
-    memcpy(program->binding_read_write_limitations, shader_info.binding_read_write_limitations, sizeof(VkDescriptorType) * shader_info.buffer_count);
-    program->descriptor_set_layout = getDescriptorSetLayout(ctx, shader_info);
+    program->descriptor_set_layout = getDescriptorSetLayout(ctx, program, shader_info);
     program->pipeline_layout = getPipelineLayout(ctx, program->descriptor_set_layout);
     program->pipeline = createPipeline(ctx, program->pipeline_layout, shader_info);
     hashmap_put(&program_map, shader_path, strlen(shader_path), program);
-    free(shader_info.buffer_types);
-    free(shader_info.buffer_indices);
-    free(shader_info.binding_read_write_limitations);
     return *program;
 }
 

@@ -1,0 +1,25 @@
+#version 450
+#extension GL_EXT_shader_atomic_float : require
+
+layout(local_size_x = 64) in;
+
+layout(binding = 0) buffer Input        {float inputs[];};
+layout(binding = 1) buffer Output       {float outputs[];};
+layout(binding = 2) buffer Operations   {uint update_idxs[];};
+
+layout(binding = 3) buffer StartPositions   {uint start_positions[];};
+layout(binding = 4) buffer ToIndices        {uint to_indices[];};
+layout(binding = 5) buffer Weigths          {float weights[];};
+
+void main() {
+    uint r  = gl_GlobalInvocationID.x;
+    if (r >= start_positions.length()) return;
+    r = update_idxs[r];
+
+    uint beg = start_positions[r];
+    uint end = start_positions[r + 1];
+    for (uint j = beg; j < end; ++j) {
+        uint to = to_indices[j];
+        atomicAdd(outputs[to], inputs[r] * weights[j]);
+    }
+}
