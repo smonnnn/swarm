@@ -1,5 +1,5 @@
 /*  sparse_matrix_multiply.c  */
-#include "swarm.h"
+#include "../swarm.h"
 
 /* ---------- tiny 4×4 CSR example ----------
    Matrix  A = | 1  2  0  0 |
@@ -12,17 +12,6 @@
    col_index  = {0, 1, 2, 0, 3, 3}
    values     = {1, 2, 3, 4, 5, 6}
    -------------------------------------------*/
-
-typedef struct{
-   uint32_t start_idxs_count;
-   uint32_t start_idxs;
-
-   uint32_t to_idxs_count;
-   uint32_t to_idxs;
-
-   uint32_t weights_count;
-   float weights;
-} SparseMatrix;
 
 int main(){
     const char* spirv_path = "./shaders/compiled/sparse_matrix_multiply.spv";
@@ -62,6 +51,7 @@ int main(){
     VKBUFFER buf_start    = newBuffer(ctx, stSz,  BUF_GPU);
     VKBUFFER buf_toIdx    = newBuffer(ctx, idxSz, BUF_GPU);
     VKBUFFER buf_weights  = newBuffer(ctx, wSz,   BUF_GPU);
+    VKBUFFER buf_indirect = newBuffer(ctx, 3 * sizeof(uint32_t), BUF_INDIRECT);
 
     /* ---- CPU staging / read-back ---------------------------------------- */
     VKBUFFER cpu_stage    = newBuffer(ctx, 128, BUF_CPU);
@@ -98,6 +88,16 @@ int main(){
     unmapBuffer(ctx, cpu_stage);
     runCopyCommand(ctx, cpu_stage, buf_weights, 0, 0, wSz);
 
+    uint32_t groups = (N_ROWS + 63) / 64;
+    uint32_t* ip = mapBuffer(ctx, cpu_stage);
+    ip[0] = groups;
+    ip[1] = 1;
+    ip[2] = 1;
+    unmapBuffer(ctx, cpu_stage);
+    runCopyCommand(ctx, cpu_stage, buf_indirect, 0, 0, buf_indirect.size);
+
+
+
     /* ---- bind to descriptor set ----------------------------------------- */
     VKBUFFER bufs[] = { buf_inputs, buf_outputs, buf_update,
                         buf_start,  buf_toIdx,   buf_weights };
@@ -107,9 +107,8 @@ int main(){
     verifyVKPROGRAM(&prog);
 
     /* ---- dispatch -------------------------------------------------------- */
-    uint32_t groups = (N_ROWS + 63) / 64;
     printf("Launch %u work-groups...\n", groups);
-    runComputeCommand(ctx, &prog, 1, groups);
+    runComputeCommand(ctx, &prog, 1, buf_indirect);
 
     /* ---- read back ------------------------------------------------------- */
     runCopyCommand(ctx, buf_outputs, cpu_stage, 0, 0, outSz);
@@ -128,6 +127,7 @@ int main(){
     destroyBuffer(ctx, buf_start);
     destroyBuffer(ctx, buf_toIdx);
     destroyBuffer(ctx, buf_weights);
+    destroyBuffer(ctx, buf_indirect);
     destroyBuffer(ctx, cpu_stage);
     destroyProgram(ctx, spirv_path);
     destroyVkContext(ctx);

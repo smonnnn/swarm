@@ -38,7 +38,7 @@ void runCopyCommand(VKCTX ctx, VKBUFFER from, VKBUFFER to, uint32_t from_offset,
     vkDestroyFence(ctx.device, fence, NULL);
 }
 
-void runComputeCommand(VKCTX ctx, VKPROGRAM* programs, uint32_t program_count, uint32_t groups){
+void runComputeCommand(VKCTX ctx, VKPROGRAM* programs, uint32_t program_count, VKBUFFER indirect){
     VkCommandBufferAllocateInfo cbai = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
         .commandPool = ctx.command_pool,
@@ -54,11 +54,26 @@ void runComputeCommand(VKCTX ctx, VKPROGRAM* programs, uint32_t program_count, u
     };
 
     vkBeginCommandBuffer(cmd, &bi);
+    VkBufferMemoryBarrier b = {
+        .sType               = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+        .srcAccessMask       = VK_ACCESS_TRANSFER_WRITE_BIT,
+        .dstAccessMask       = VK_ACCESS_INDIRECT_COMMAND_READ_BIT,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .buffer              = indirect.buffer,
+        .offset              = 0,
+        .size                = indirect.size
+    };
+    vkCmdPipelineBarrier(cmd,
+                        VK_PIPELINE_STAGE_TRANSFER_BIT,
+                        VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT,
+                        0, 0, NULL, 1, &b, 0, NULL);
     for(int i = 0; i < program_count; i++){        
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, programs[i].pipeline);
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, programs[i].pipeline_layout, 0, 1, &programs[i].descriptor_set, 0, NULL);
-
-        vkCmdDispatch(cmd, groups, 1, 1);
+        
+        vkCmdDispatchIndirect(cmd, indirect.buffer, 0);
+        //vkCmdDispatch(cmd, 1, 1, 1);
         VkBufferMemoryBarrier barriers[programs[i].buffer_count]; //Should be the max amount of barriers possible for the given buffers.
         uint32_t barrierCount = 0;
 

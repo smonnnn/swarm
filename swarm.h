@@ -19,7 +19,8 @@ typedef enum {
 
 typedef enum {
     BUF_CPU = 0,
-    BUF_GPU = 1
+    BUF_GPU = 1,
+    BUF_INDIRECT = 2
 } BufferLocation;
 
 //Structs
@@ -37,6 +38,7 @@ typedef struct VKBUFFER {
     VkBuffer       buffer;
     VkDeviceMemory memory;
     VkDeviceSize   size;
+    BufferLocation location;
 } VKBUFFER;
 
 typedef struct{
@@ -74,5 +76,5 @@ void verifyVKPROGRAM(VKPROGRAM* prog);
 
 //vk_command
 void runCopyCommand(VKCTX ctx, VKBUFFER from, VKBUFFER to, uint32_t from_offset, uint32_t to_offset, uint32_t size);
-void runComputeCommand(VKCTX ctx, VKPROGRAM* programs, uint32_t program_count, uint32_t groups);
+void runComputeCommand(VKCTX ctx, VKPROGRAM* programs, uint32_t program_count, VKBUFFER indirect);
 #endif

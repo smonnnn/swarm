@@ -1,4 +1,4 @@
-#include "swarm.h"
+#include "../swarm.h"
 
 int main(){
     const char* spirv_path = "./shaders/compiled/add.spv";
@@ -8,15 +8,19 @@ int main(){
     VKCTX ctx = createVkContext();
 
     printf("Create programs...\n");
-    VKPROGRAM programs[2];
+    VKPROGRAM programs[2] = {0};
     programs[0] = createProgram(ctx, spirv_path);
+    printf("A\n");
+    printf("%s\n", spirv_path);
     programs[1] = createProgram(ctx, spirv_path);
+    printf("A\n");
 
     printf("Create buffers...\n");
     VKBUFFER cpu_buffer = newBuffer(ctx, buff_size, BUF_CPU);
     VKBUFFER bufA       = newBuffer(ctx, buff_size, BUF_GPU);
     VKBUFFER bufB       = newBuffer(ctx, buff_size, BUF_GPU);
     VKBUFFER output     = newBuffer(ctx, buff_size, BUF_GPU);
+    VKBUFFER indirect   = newBuffer(ctx, 3 * sizeof(uint32_t), BUF_INDIRECT);
     
     printf("Map buffer & copy data...\n");
     float* mapped = mapBuffer(ctx, cpu_buffer);
@@ -28,6 +32,15 @@ int main(){
     printf("Copy to GPU buffers...\n");
     runCopyCommand(ctx, cpu_buffer, bufA, 0, 0, cpu_buffer.size);
     runCopyCommand(ctx, cpu_buffer, bufB, 0, 0, cpu_buffer.size);
+    
+    //map buffer again and copy indirect value to gpu
+    uint32_t* m = mapBuffer(ctx, cpu_buffer);
+    uint32_t groups = (element_count + 63) / 64;
+    m[0] = groups;
+    m[1] = 1;
+    m[2] = 1;
+    unmapBuffer(ctx, cpu_buffer);
+    runCopyCommand(ctx, cpu_buffer, indirect, 0, 0, indirect.size);
 
     printf("Bind buffers to program...\n");
     VKBUFFER buffers[3];
@@ -47,8 +60,7 @@ int main(){
     verifyVKPROGRAM(programs + 1);
 
     printf("run compute command...\n");
-    uint32_t groups = (element_count + 63) / 64;
-    runComputeCommand(ctx, programs, 2, groups);
+    runComputeCommand(ctx, programs, 2, indirect);
 
     printf("Copy data back to cpu buffer...\n");
     runCopyCommand(ctx, output, cpu_buffer, 0, 0, output.size);
@@ -66,6 +78,7 @@ int main(){
     destroyBuffer(ctx, bufB);
     destroyBuffer(ctx, output);
     destroyBuffer(ctx, cpu_buffer);
+    destroyBuffer(ctx, indirect);
     destroyProgram(ctx, spirv_path);
     destroyVkContext(ctx);
     printf("Fin.\n");

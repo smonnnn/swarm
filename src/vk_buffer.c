@@ -1,20 +1,26 @@
 #include "vk_buffer.h"
 
 VKBUFFER newBuffer(VKCTX ctx, VkDeviceSize size, BufferLocation where){
-    VkBufferUsageFlags usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT
-                             | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT
-                             | VK_BUFFER_USAGE_TRANSFER_SRC_BIT
-                             | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    VkBufferUsageFlags usage;
+    if(where == BUF_INDIRECT){
+        usage = VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    } else {
+        usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT
+                            | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT
+                            | VK_BUFFER_USAGE_TRANSFER_SRC_BIT
+                            | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    }
 
     VkBufferCreateInfo bufInfo = {
-        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-        .size  = size,
-        .usage = usage,
+        .sType       = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size        = size,
+        .usage       = usage,
         .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
     };
 
     VKBUFFER buf = {0};
     buf.size = size;
+    buf.location = where;
     VK_CHECK(vkCreateBuffer(ctx.device, &bufInfo, NULL, &buf.buffer));
 
     VkMemoryRequirements req;

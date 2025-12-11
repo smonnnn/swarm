@@ -7,16 +7,18 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+typedef enum {
+    BUF_CPU = 0,
+    BUF_GPU = 1,
+    BUF_INDIRECT = 2
+} BufferLocation;
+
 typedef struct VKBUFFER {
     VkBuffer       buffer;
     VkDeviceMemory memory;
     VkDeviceSize   size;
+    BufferLocation location;
 } VKBUFFER;
-
-typedef enum {
-    BUF_CPU = 0,
-    BUF_GPU = 1
-} BufferLocation;
 
 VKBUFFER newBuffer(VKCTX ctx, VkDeviceSize size, BufferLocation where);
 void destroyBuffer(VKCTX ctx, VKBUFFER buf);

@@ -1,52 +1,26 @@
 #!/bin/bash
-
 set -e
 
-echo "Building Vulkan compute library..."
+echo "Building Vulkan compute library (debug)..."
 
-# Create output directory
 mkdir -p build
 
-# Compile each source file separately
-echo "Compiling vk_setup.c..."
-gcc -c -O2 -Wall -fPIC \
-    src/vk_setup.c \
-    -Isrc \
-    -I/usr/include/vulkan \
-    -o build/vk_setup.o
+# ---- common flags -----------------------------------------------------------
+CFLAGS="-g -O0 -Wall -fPIC"          # -g  → debug info
+INC="-Isrc -I/usr/include/vulkan"
 
-echo "Compiling vk_buffer.c..."
-gcc -c -O2 -Wall -fPIC \
-    src/vk_buffer.c \
-    -Isrc \
-    -I/usr/include/vulkan \
-    -o build/vk_buffer.o
+# ---- compile ----------------------------------------------------------------
+for f in vk_setup vk_buffer vk_command vk_program; do
+    echo "Compiling $f.c (debug)..."
+    gcc -c $CFLAGS $INC -o build/$f.o src/$f.c
+done
 
-echo "Compiling vk_command.c..."
-gcc -c -O2 -Wall -fPIC \
-    src/vk_command.c \
-    -Isrc \
-    -I/usr/include/vulkan \
-    -o build/vk_command.o
+echo "Compiling spirv_reflect.c (debug)..."
+gcc -c $CFLAGS $INC -o build/spirv_reflect.o src/include/spirv_reflect.c
 
-echo "Compiling vk_program.c..."
-gcc -c -O2 -Wall -fPIC \
-    src/vk_program.c \
-    -Isrc \
-    -I/usr/include/vulkan \
-    -o build/vk_program.o
-
-echo "Compiling spirv_reflect.c..."
-gcc -c -O2 -Wall -fPIC \
-    src/include/spirv_reflect.c \
-    -Isrc \
-    -I/usr/include/vulkan \
-    -o build/spirv_reflect.o
-
-# Create static library
+# ---- static library ---------------------------------------------------------
 echo "Creating static library..."
-ar rcs build/libswarm.a build/vk_setup.o build/vk_buffer.o build/vk_command.o build/vk_program.o build/spirv_reflect.o
+ar rcs build/libswarm.a build/*.o
 
-echo "Build complete!"
-echo "Library: build/libswarm.a"
-echo "Object files: build/vk_*.o"
+echo "Done."
+echo "Debug library: build/libswarm.a"
