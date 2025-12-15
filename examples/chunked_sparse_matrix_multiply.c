@@ -37,7 +37,7 @@ void addChunk(Matrix* matrix, uint32_t from, uint32_t to, float value){
     matrix->offsets[matrix->chunk_count - 1] = 1;
 }
 
-//Helper for setting weights in a more interpretable manner. Weights should be updated on the GPU for actual ANNs.
+//Helper for setting weights in a more interpretable manner. Weights should be updated on the GPU for actual applications.
 void setWeight(Matrix* matrix, uint32_t from, uint32_t to, float value){
     for(int i = 0; i < matrix->chunk_count; i++){
         if(matrix->from[i] == from){
