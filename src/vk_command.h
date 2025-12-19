@@ -4,7 +4,9 @@
 #include "vk_setup.h"
 #include "vk_buffer.h"
 #include "vk_program.h"
-void runCopyCommand(VKCTX ctx, VKBUFFER from, VKBUFFER to, uint32_t from_offset, uint32_t to_offset, uint32_t size);
-void runComputeCommand(VKCTX ctx, VKPROGRAM* programs, uint32_t program_count, VKBUFFER indirect);
-
+VkCommandBuffer startCommand(VKCTX ctx);
+void copyBuffer(VKCTX ctx, VkCommandBuffer cmd, VKBUFFER from, VKBUFFER to, uint32_t from_offset, uint32_t to_offset, uint32_t size);
+void runProgram(VKCTX ctx, VkCommandBuffer cmd, VKPROGRAM program, VKBUFFER indirect);
+void submitCommand(VKCTX ctx, VkCommandBuffer cmd);
+void copyBufferSlow(VKCTX ctx, VKBUFFER from, VKBUFFER to, uint32_t from_offset, uint32_t to_offset, uint32_t size);
 #endif

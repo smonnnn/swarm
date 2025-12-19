@@ -30,8 +30,8 @@ int main(){
     unmapBuffer(ctx, cpu_buffer);
 
     printf("Copy to GPU buffers...\n");
-    runCopyCommand(ctx, cpu_buffer, bufA, 0, 0, cpu_buffer.size);
-    runCopyCommand(ctx, cpu_buffer, bufB, 0, 0, cpu_buffer.size);
+    copyBufferSlow(ctx, cpu_buffer, bufA, 0, 0, cpu_buffer.size);
+    copyBufferSlow(ctx, cpu_buffer, bufB, 0, 0, cpu_buffer.size);
     
     //map buffer again and copy indirect value to gpu
     uint32_t* m = mapBuffer(ctx, cpu_buffer);
@@ -40,7 +40,7 @@ int main(){
     m[1] = 1;
     m[2] = 1;
     unmapBuffer(ctx, cpu_buffer);
-    runCopyCommand(ctx, cpu_buffer, indirect, 0, 0, indirect.size);
+    copyBufferSlow(ctx, cpu_buffer, indirect, 0, 0, indirect.size);
 
     printf("Bind buffers to program...\n");
     VKBUFFER buffers[3];
@@ -60,10 +60,13 @@ int main(){
     verifyVKPROGRAM(programs + 1);
 
     printf("run compute command...\n");
-    runComputeCommand(ctx, programs, 2, indirect);
+    VkCommandBuffer cmd = startCommand(ctx);
+    runProgram(ctx, cmd, programs[0], indirect);
+    runProgram(ctx, cmd, programs[1], indirect);
+    submitCommand(ctx, cmd);
 
     printf("Copy data back to cpu buffer...\n");
-    runCopyCommand(ctx, output, cpu_buffer, 0, 0, output.size);
+    copyBufferSlow(ctx, output, cpu_buffer, 0, 0, output.size);
     
     printf("Map buffer & print results...\n");
     mapped = mapBuffer(ctx, cpu_buffer);

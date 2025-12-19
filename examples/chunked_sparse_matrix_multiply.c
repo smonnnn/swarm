@@ -24,6 +24,7 @@ typedef struct {
 
 void addChunk(Matrix* matrix, uint32_t from, uint32_t to, float value){
     Chunk* tmpC = realloc(matrix->chunks, (matrix->chunk_count + 1) * sizeof(Chunk));
+    memset(tmpC[matrix->chunk_count - 1].weights, 0.0f, CHUNK_SIZE * sizeof(float));
     tmpC[matrix->chunk_count - 1].to[0] = to;
     tmpC[matrix->chunk_count - 1].weights[0] = value;
     matrix->chunks = tmpC;
@@ -65,12 +66,12 @@ GPU_Matrix* toGPU_Matrix(VKCTX ctx, Matrix* matrix){
     Chunk* p = mapBuffer(ctx, stage);
     memcpy(p, matrix->chunks, cc * sizeof(Chunk));
     unmapBuffer(ctx, stage);
-    runCopyCommand(ctx, stage, gpu_matrix->chunks, 0, 0, cc * sizeof(Chunk));
+    copyBufferSlow(ctx, stage, gpu_matrix->chunks, 0, 0, cc * sizeof(Chunk));
 
     uint32_t* p = mapBuffer(ctx, stage);
     memcpy(p, matrix->from, cc * sizeof(uint32_t));
     unmapBuffer(ctx, stage);
-    runCopyCommand(ctx, stage, gpu_matrix->from, 0, 0, cc * sizeof(uint32_t));
+    copyBufferSlow(ctx, stage, gpu_matrix->from, 0, 0, cc * sizeof(uint32_t));
     destroyBuffer(ctx, stage);
     return gpu_matrix;
 }
@@ -83,11 +84,11 @@ Matrix fromGPU_Matrix(VKCTX ctx, GPU_Matrix* gpu_matrix){
     matrix.chunks = malloc(cc * sizeof(Chunk));
     VKBUFFER stage = newBuffer(ctx, cc * sizeof(Chunk), BUF_CPU);
 
-    runCopyCommand(ctx, gpu_matrix->from, stage, 0, 0, cc * sizeof(uint32_t));
+    copyBufferSlow(ctx, gpu_matrix->from, stage, 0, 0, cc * sizeof(uint32_t));
     uint32_t* p = mapBuffer(ctx, stage);
     memcpy(p, matrix.from, cc * sizeof(uint32_t));
 
-    runCopyCommand(ctx, gpu_matrix->chunks, stage, 0, 0, cc * sizeof(Chunk));
+    copyBufferSlow(ctx, gpu_matrix->chunks, stage, 0, 0, cc * sizeof(Chunk));
     uint32_t* p = mapBuffer(ctx, stage);
     memcpy(p, matrix.chunks, cc * sizeof(Chunk));
     destroyBuffer(ctx, stage);
@@ -96,9 +97,10 @@ Matrix fromGPU_Matrix(VKCTX ctx, GPU_Matrix* gpu_matrix){
 
 void main(){
     const char* mm_spirv_path = "./shaders/compiled/chunked_sparse_matrix_multiply.spv";
-    const char* filte_spirv_path = "./shaders/compiled/chunked_sparse_matrix_multiply.spv";
+    const char* filter_spirv_path = "./shaders/compiled/chunked_sparse_matrix_multiply.spv";
     VKCTX ctx = createVkContext();
-    VKPROGRAM csmm = createProgram(ctx, mm_spirv_path);
+    VKPROGRAM program_mm = createProgram(ctx, mm_spirv_path);
+    VKPROGRAM program_filter = createProgram(ctx, filter_spirv_path);
 
     Matrix cmat = {0};
     setWeight(&cmat, 0, 0, 1.0f);
@@ -118,5 +120,17 @@ void main(){
     VKBUFFER input = newBuffer(ctx, 4 * sizeof(float), BUF_GPU);
     VKBUFFER output = newBuffer(ctx, 4 * sizeof(float), BUF_GPU);
     VKBUFFER active = newBuffer(ctx, 4 * sizeof(float), BUF_GPU);
+    VKBUFFER counter = newBuffer(ctx, 1 * sizeof(uint32_t), BUF_GPU);
+    VKBUFFER indirect = newBuffer(ctx, 3 * sizeof(uint32_t), BUF_INDIRECT);
+
+    //set values.
+
+
+    //run program
+    VKBUFFER buffers[] = {input, output, gmat->from, active, gmat->chunks, counter};
+    useBuffers(ctx, &program_mm, buffers, 6);
+    VkCommandBuffer cmd = startCommand(ctx);
+    runProgram(ctx, cmd, program_mm, indirect);
+    submitCommand(ctx, cmd);
 
 }   
