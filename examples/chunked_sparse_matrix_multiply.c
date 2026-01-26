@@ -124,7 +124,13 @@ void main(){
     VKBUFFER indirect = newBuffer(ctx, 3 * sizeof(uint32_t), BUF_INDIRECT);
 
     //set values.
-
+    float input_data[] = {1.0, 1.0, 1.0, 1.0};
+    VKBUFFER stage = newBuffer(ctx, 4 * sizeof(float), BUF_CPU);
+    uint32_t* p = mapBuffer(ctx, stage);
+    memcpy(p, input_data, 4 * sizeof(float));
+    unmapBuffer(ctx, stage);
+    copyBufferSlow(ctx, stage, input, 0, 0, 4 * sizeof(float));
+    destroyBuffer(ctx, stage);
 
     //run program
     VKBUFFER buffers[] = {input, output, gmat->from, active, gmat->chunks, counter};
@@ -132,5 +138,4 @@ void main(){
     VkCommandBuffer cmd = startCommand(ctx);
     runProgram(ctx, cmd, program_mm, indirect);
     submitCommand(ctx, cmd);
-
 }   
