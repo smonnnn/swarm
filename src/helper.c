@@ -34,7 +34,8 @@ VKBUFFER to_gpu(void* data, size_t size){
     for(int i = 0; i < size; i += STAGING_BUFFER_SIZE){
         mapped = mapBuffer(*ctx, *staging);
         memcpy(mapped, data, size);
-        copyBufferSlow(*ctx, mapped, buffer, i, i, min(STAGING_BUFFER_SIZE, size - i));
+        unmapBuffer(*ctx, *staging);
+        copyBufferSlow(*ctx, mapped, buffer, i, i, min(STAGING_BUFFER_SIZE, (size - i)));
     }
     return buffer;
 }

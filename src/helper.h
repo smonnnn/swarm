@@ -4,5 +4,5 @@
 #include "vk_setup.h"
 #include "vk_buffer.h"
 #include "vk_program.h"
-#include <math.h>
+#include <stdlib.h>
 #endif
