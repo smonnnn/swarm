@@ -55,10 +55,6 @@ int main(){
     buffersB[2] = output;
     useBuffers(ctx, programs + 1, buffersB, 3);
 
-    //Verify programs...
-    verifyVKPROGRAM(programs);
-    verifyVKPROGRAM(programs + 1);
-
     printf("run compute command...\n");
     VkCommandBuffer cmd = startCommand(ctx);
     runProgram(ctx, cmd, programs[0], indirect);

@@ -160,6 +160,7 @@ VKPROGRAM createProgram(VKCTX ctx, const char* shader_path){
     program->pipeline_layout = getPipelineLayout(ctx, program->descriptor_set_layout);
     program->pipeline = createPipeline(ctx, program->pipeline_layout, shader_info);
     hashmap_put(&program_map, shader_path, strlen(shader_path), program);
+    verifyVKPROGRAM(program);
     return *program;
 }
 

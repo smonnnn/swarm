@@ -101,9 +101,6 @@ int main(){
 						buf_start,  buf_toIdx,   buf_weights };
 	useBuffers(ctx, &prog, bufs, 6);
 
-	/* ---- sanity check ---------------------------------------------------- */
-	verifyVKPROGRAM(&prog);
-
 	/* ---- dispatch -------------------------------------------------------- */
 	printf("Launch %u work-groups...\n", groups);
 	VkCommandBuffer cmd = startCommand(ctx);

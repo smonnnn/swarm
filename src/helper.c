@@ -1,44 +1,81 @@
 #include "helper.h"
-#define STAGING_BUFFER_SIZE (512 * 1024 * 1024)   //32MB buffer for copying data onto the GPU.
+#define STAGING_BUFFER_SIZE (16 * 1024 * 1024)   //16MB buffer for copying data onto the GPU.
+#define LARGE_THRESHOLD    (128 * 1024 * 1024)   //if large enough, create dedicated staging buffer.
 
+static VKCTX ctx = {0};
+static int ctx_initialized = 0;
 VKCTX* get_ctx(){
-    static VKCTX ctx = {0};
-    static int initialized = 0;
-    
-    if (!initialized) {
+    if (!ctx_initialized) {
         ctx = createVkContext();
-        initialized = 1;
+        ctx_initialized = 1;
     }
-    
     return &ctx;
 }
 
+static VKBUFFER staging = {0};
+static void* mapped_staging;
+static int staging_initialized = 0;
 VKBUFFER* get_staging_buffer(){
     VKCTX* ctx = get_ctx();
-    static VKBUFFER staging = {0};
-    static int initialized = 0;
-
-    if (!initialized) {
+    if (!staging_initialized) {
         staging = newBuffer(*ctx, STAGING_BUFFER_SIZE, BUF_CPU);
-        initialized = 1;
+        mapped_staging = mapBuffer(*ctx, staging);
+        staging_initialized = 1;
     }
-    
     return &staging;
 }
 
-VKBUFFER to_gpu(void* data, size_t size){
+void cleanup(){
+    if(!ctx_initialized) return;
     VKCTX* ctx = get_ctx();
-    VKBUFFER* staging = get_staging_buffer();
+    if(staging_initialized){
+        unmapBuffer(*ctx, staging);
+        destroyBuffer(*ctx, staging);
+    }
+    destroyVkContext(*ctx);
+}
+
+//Maybe clear up the code a bit with regards to mapping and the two different buffers.
+VKBUFFER toGPU(void* data, size_t size){
+    VKCTX* ctx = get_ctx();
     VKBUFFER buffer = newBuffer(*ctx, size, BUF_GPU);
-    void* mapped;
-    int segment_size;
-    for(int i = 0; i < size; i += STAGING_BUFFER_SIZE){
-        segment_size = min(STAGING_BUFFER_SIZE, (size - i));
-        mapped = mapBuffer(*ctx, *staging);
-        memcpy(mapped, data, segment_size);
-        unmapBuffer(*ctx, *staging);
-        copyBufferSlow(*ctx, mapped, buffer, i, i, segment_size);
+    VKBUFFER staging;
+    if(size <= LARGE_THRESHOLD){
+        int segment_size;
+        staging = *get_staging_buffer();
+        for(int i = 0; i < size; i += STAGING_BUFFER_SIZE){
+            segment_size = min(STAGING_BUFFER_SIZE, (size - i));
+            memcpy(mapped_staging, (char*)data + i, segment_size);
+            copyBufferSlow(*ctx, staging, buffer, 0, i, segment_size);
+        }
+    } else {
+        staging = newBuffer(*ctx, size, BUF_CPU);
+        void* mapped = mapBuffer(*ctx, staging);
+        memcpy(mapped, data, size);
+        unmapBuffer(*ctx, staging);
+        copyBufferSlow(*ctx, staging, buffer, 0, 0, size);
+        destroyBuffer(*ctx, staging);
     }
     return buffer;
 }
 
+void fromGPU(VKBUFFER buffer, void* output){
+    VKCTX* ctx = get_ctx();
+    VKBUFFER staging;
+    if(buffer.size <= LARGE_THRESHOLD){
+        int segment_size;
+        staging = *get_staging_buffer();
+        for(int i = 0; i < buffer.size; i += STAGING_BUFFER_SIZE){
+            segment_size = min(STAGING_BUFFER_SIZE, (buffer.size - i));
+            copyBufferSlow(*ctx, buffer, staging, i, 0, segment_size);
+            memcpy((char*)output + i, mapped_staging, segment_size);
+        }
+    } else {
+        staging = newBuffer(*ctx, buffer.size, BUF_CPU);
+        void* mapped = mapBuffer(*ctx, staging);
+        copyBufferSlow(*ctx, buffer, staging, 0, 0, buffer.size);
+        memcpy(output, mapped, buffer.size);
+        unmapBuffer(*ctx, staging);
+        destroyBuffer(*ctx, staging);
+    }
+}
