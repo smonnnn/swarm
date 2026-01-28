@@ -35,7 +35,7 @@ void cleanup(){
     destroyVkContext(*ctx);
 }
 
-//Maybe clear up the code a bit with regards to mapping and the two different buffers.
+//Maybe clear up the code a bit with regards to mapping and the two different buffers. Maybe do buffer loading while copying data on the CPU, or switch to memory mapped buffers.
 VKBUFFER toGPU(void* data, size_t size){
     VKCTX* ctx = get_ctx();
     VKBUFFER buffer = newBuffer(*ctx, size, BUF_GPU);
