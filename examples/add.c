@@ -1,5 +1,28 @@
 #include "../swarm.h"
 
+/* How I would like to define kernels in the future somehow:
+#PRAGMA SHADER_BEGIN(local_size=64)
+void kernel_add(typedefstruct_or_valuetype* outputs, typedefstruct_or_valuetype* buffername1, typedefstruct_or_valuetype* buffername2...){
+    uint32_t x, uint32_t y, uint32_t z; always defined.
+    ///Normal GLSL code pretty much, with simpler names etc.:
+    if (x >= outputs.length() || x >= buffername1.length() || x >= buffername2.length()) return;
+    outputs[x] = buffername1[x] + buffername2[x];
+}
+#PRAGMA SHADER_END
+
+How I would have a GPU function be called from C code:
+...
+VKBUFFER gpu_data1 = to_gpu(data1*, datalen1);
+VKBUFFER gpu_data2 = to_gpu(data2*, datalen2);
+
+kernel_add(gpu_data1, gpu_data2);
+...
+
+funtion always returns void and doesn't wait on the gpu operation to be complete, memory barriers are automatically placed for each buffer for the program.
+to get the data and use it on the cpu, a function that waits on the memory barries of the buffer and copies data to the CPU host is used like so:
+from_gpu(gpu_data1, data1); //lenght is stored in the VKBUFFER struct.
+*/
+
 int main(){
     const char* spirv_path = "./shaders/compiled/add.spv";
     size_t element_count = 256;
