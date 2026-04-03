@@ -1,0 +1,26 @@
+#version 450
+layout(local_size_x = 64) in;
+#define CHUNK_SIZE 16
+
+layout(binding = 0) readonly buffer Input     {float inputs[];};
+layout(binding = 1) buffer Output   {float outputs[];};
+layout(binding = 2) readonly buffer Mappings  {uint from[];};
+layout(binding = 3) buffer Active    {uint active_chunks[];};
+layout(binding = 4) readonly buffer Chunks  {
+    uint to[CHUNK_SIZE];
+    float weights[CHUNK_SIZE];
+} chunks[];
+layout(binding = 5) coherent buffer Counter   {uint counter;};
+
+void main() {
+    uint i = gl_GlobalInvocationID.x;
+    if (i == 0) counter = 0;
+    if (i >= inputs.length()) return;
+    active_chunks[i] = 0;
+    if (inputs[i] > 0.0) {
+        uint index = atomicAdd(counter, 1);
+        if (index < active_chunks.length()) {
+            active_chunks[index] = i;
+        }
+    }
+}

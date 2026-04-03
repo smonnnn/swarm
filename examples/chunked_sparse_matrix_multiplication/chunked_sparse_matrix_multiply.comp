@@ -5,24 +5,34 @@
 layout(local_size_x = 64) in;
 
 layout(binding = 0) readonly buffer Input     {float inputs[];};
-layout(binding = 1) writeonly buffer Output   {float outputs[];};
+layout(binding = 1) buffer Output   {float outputs[];};
 layout(binding = 2) readonly buffer Mappings  {uint from[];};
 layout(binding = 3) readonly buffer Active    {uint active_chunks[];};
+struct Chunk {
+    uint to[CHUNK_SIZE];
+    float weights[CHUNK_SIZE];
+};
 
 layout(binding = 4) readonly buffer Chunks  {
-    float weights[CHUNK_SIZE];
-    uint to[CHUNK_SIZE];
-} chunks[];
+    Chunk chunks[];
+};
+layout(binding = 5) coherent buffer Counter   {uint counter;};
 
 void main() {
     uint r  = gl_GlobalInvocationID.x;
     if (r >= active_chunks.length()) return;
+    
     uint chunk_idx = active_chunks[r];
-    float v = from[chunk_idx];
-
+    uint src_idx = from[chunk_idx];
+    if (src_idx >= inputs.length()) return;
+    
+    float v = inputs[src_idx];
+    
     for (uint i = 0; i < CHUNK_SIZE; ++i) {
         float w = chunks[chunk_idx].weights[i];
-        uint to = chunks[chunk_idx].to[i];
-        atomicAdd(outputs[to], v * w);
+        uint dst_idx = chunks[chunk_idx].to[i];
+        if (w != 0.0 && dst_idx < outputs.length()) {
+            atomicAdd(outputs[dst_idx], v * w);
+        }
     }
 }

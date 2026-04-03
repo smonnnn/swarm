@@ -1,4 +1,4 @@
-#include "../swarm.h"
+#include "../../swarm.h"
 
 /* How I would like to define kernels in the future somehow:
 #PRAGMA SHADER_BEGIN(local_size=64)
@@ -24,7 +24,7 @@ from_gpu(gpu_data1, data1); //lenght is stored in the VKBUFFER struct.
 */
 
 int main(){
-    const char* spirv_path = "./shaders/compiled/add.spv";
+    const char* spirv_path = "./add.spirv";
     size_t element_count = 256;
     size_t buff_size = element_count * sizeof(float);
     printf("Create context...\n");

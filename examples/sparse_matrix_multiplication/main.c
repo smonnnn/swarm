@@ -1,5 +1,5 @@
 /*  sparse_matrix_multiply.c  */
-#include "../swarm.h"
+#include "../../swarm.h"
 
 /* ---------- tiny 4×4 CSR example ----------
 	Matrix  A = | 1  2  0  0 |
@@ -14,7 +14,7 @@
 	-------------------------------------------*/
 
 int main(){
-	const char* spirv_path = "./shaders/compiled/sparse_matrix_multiply.spv";
+	const char* spirv_path = "./sparse_matrix_multiply.spirv";
 
 	/* ---- host data ------------------------------------------------------- */
 	const uint32_t N_ROWS  = 4;

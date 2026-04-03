@@ -143,6 +143,7 @@ VKCTX createVkContext(){
     };
 
     const char* deviceExts[] = {
+        VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
         VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME,
         VK_EXT_SHADER_ATOMIC_FLOAT_EXTENSION_NAME, //atomic float
         //VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME,
@@ -172,6 +173,9 @@ VKCTX createVkContext(){
     vk12.bufferDeviceAddress = VK_TRUE;
     vk12.descriptorIndexing = VK_TRUE;
     vk12.timelineSemaphore = VK_TRUE;
+    vk12.runtimeDescriptorArray = VK_TRUE;
+    vk12.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
+    vk12.descriptorBindingVariableDescriptorCount = VK_TRUE;
 
     VKCTX ctx = {0};
     printf("Creating instance...\n");
